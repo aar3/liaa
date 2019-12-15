@@ -10,7 +10,7 @@ class TestNode:
     def test_long_id(self):
         rid = hashlib.sha1(str(random.getrandbits(255)).encode()).digest()
         node = Node(rid)
-        assert node.long_id == int(rid.hex(), 16)
+        assert node.long_id == hex_to_base_int(rid.hex())
 
     def test_distance_calculation(self):
         ridone = hashlib.sha1(str(random.getrandbits(255)).encode())
