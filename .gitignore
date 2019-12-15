@@ -12,3 +12,5 @@ venv/
 .requirements.lock
 .envrc
 .vscode/
+__pycache__
+.pytest_cache/
