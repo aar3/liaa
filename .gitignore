@@ -8,3 +8,9 @@ dist
 kademlia.egg-info
 docs/_build
 .coverage
+venv/
+.requirements.lock
+.envrc
+.vscode/
+__pycache__
+.pytest_cache/
