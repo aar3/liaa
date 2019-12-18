@@ -10,8 +10,7 @@ from kademlia.protocol import KademliaProtocol
 from kademlia.utils import digest
 from kademlia.storage import ForgetfulStorage
 from kademlia.node import Node
-from kademlia.crawling import ValueSpiderCrawl
-from kademlia.crawling import NodeSpiderCrawl
+from kademlia.crawling import ValueSpiderCrawl, NodeSpiderCrawl
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -65,8 +64,7 @@ class Server:
 		Provide interface="::" to accept ipv6 address
 		"""
 		loop = asyncio.get_event_loop()
-		listen = loop.create_datagram_endpoint(self._create_protocol,
-											   local_addr=(interface, port))
+		listen = loop.create_datagram_endpoint(self._create_protocol, local_addr=(interface, port))
 		log.info("Node %i listening on %s:%i", self.node.long_id, interface, port)
 		self.transport, self.protocol = await listen
 		# finally, schedule refreshing table
@@ -87,8 +85,7 @@ class Server:
 		for node_id in self.protocol.get_refresh_ids():
 			node = Node(node_id)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
-			spider = NodeSpiderCrawl(self.protocol, node, nearest,
-									 self.ksize, self.alpha)
+			spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 			results.append(spider.find())
 
 		# do our crawling
@@ -119,13 +116,11 @@ class Server:
 			addrs: A `list` of (ip, port) `tuple` pairs.  Note that only IP
 				   addresses are acceptable - hostnames will cause an error.
 		"""
-		log.debug("Attempting to bootstrap node with %i initial contacts",
-				  len(addrs))
+		log.debug("Attempting to bootstrap node with %i initial contacts", len(addrs))
 		cos = list(map(self.bootstrap_node, addrs))
 		gathered = await asyncio.gather(*cos)
 		nodes = [node for node in gathered if node is not None]
-		spider = NodeSpiderCrawl(self.protocol, self.node, nodes,
-								 self.ksize, self.alpha)
+		spider = NodeSpiderCrawl(self.protocol, self.node, nodes, self.ksize, self.alpha)
 		return await spider.find()
 
 	async def bootstrap_node(self, addr):
@@ -149,8 +144,7 @@ class Server:
 		if not nearest:
 			log.warning("There are no known neighbors to get key %s", key)
 			return None
-		spider = ValueSpiderCrawl(self.protocol, node, nearest,
-								  self.ksize, self.alpha)
+		spider = ValueSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 		return await spider.find()
 
 	async def set(self, key, value):
@@ -158,9 +152,7 @@ class Server:
 		Set the given string key to the given value in the network.
 		"""
 		if not check_dht_value_type(value):
-			raise TypeError(
-				"Value must be of type int, float, bool, str, or bytes"
-			)
+			raise TypeError("Value must be of type int, float, bool, str, or bytes")
 		log.info("setting '%s' = '%s' on network", key, value)
 		dkey = digest(key)
 		return await self.set_digest(dkey, value)
@@ -174,12 +166,10 @@ class Server:
 
 		nearest = self.protocol.router.find_neighbors(node)
 		if not nearest:
-			log.warning("There are no known neighbors to set key %s",
-						dkey.hex())
+			log.warning("There are no known neighbors to set key %s", dkey.hex())
 			return False
 
-		spider = NodeSpiderCrawl(self.protocol, node, nearest,
-								 self.ksize, self.alpha)
+		spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 		nodes = await spider.find()
 		log.info("setting '%s' on %s", dkey.hex(), list(map(str, nodes)))
 
@@ -197,6 +187,7 @@ class Server:
 		to a cache file with the given fname.
 		"""
 		log.info("Saving state to %s", fname)
+		# pylint: disable=bad-continuation
 		data = {
 			'ksize': self.ksize,
 			'alpha': self.alpha,
@@ -235,6 +226,7 @@ class Server:
 		"""
 		self.save_state(fname)
 		loop = asyncio.get_event_loop()
+		# pylint: disable=bad-continuation
 		self.save_state_loop = loop.call_later(frequency,
 											   self.save_state_regularly,
 											   fname,
@@ -246,6 +238,7 @@ def check_dht_value_type(value):
 	Checks to see if the type of the value is a valid type for
 	placing in the dht.
 	"""
+	# pylint: disable=bad-continuation
 	typeset = [
 		int,
 		float,

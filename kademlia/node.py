@@ -1,6 +1,8 @@
 from operator import itemgetter
 import heapq
 
+from kademlia.utils import hex_to_base_int
+
 
 class Node:
 	"""
@@ -21,9 +23,9 @@ class Node:
 		self.id = node_id  # pylint: disable=invalid-name
 		self.ip = ip  # pylint: disable=invalid-name
 		self.port = port
-		self.long_id = int(node_id.hex(), 16)
+		self.long_id = hex_to_base_int(node_id.hex())
 
-	def same_home_as(self, node):
+	def is_same_node(self, node):
 		return self.ip == node.ip and self.port == node.port
 
 	def distance_to(self, node):

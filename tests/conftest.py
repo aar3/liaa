@@ -4,9 +4,9 @@ from struct import pack
 
 import pytest
 
-from kademlia.network import Server
+from kademlia.network import Server, KademliaProtocol
 from kademlia.node import Node
-from kademlia.routing import RoutingTable
+from kademlia.routing import RoutingTable, KBucket
 
 
 @pytest.yield_fixture
@@ -34,6 +34,14 @@ def mknode():
 			node_id = hashlib.sha1(randbits.encode()).digest()
 		return Node(node_id, ip_addy, port)
 	return _mknode
+
+
+# pylint: disable=too-few-public-methods
+@pytest.fixture()
+def mkbucket():
+	def _mkbucket(ksize, low=0, high=2**160):
+		return KBucket(low, high, ksize)
+	return _mkbucket
 
 
 # pylint: disable=too-few-public-methods
