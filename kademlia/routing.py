@@ -87,7 +87,7 @@ class KBucket:
 
 class TableTraverser:
 	def __init__(self, table, start_node):
-		index = table.get_bucket_for(start_node)
+		index = table.get_bucket_index_for(start_node)
 		table.buckets[index].touch_last_updated()
 		self.current_nodes = table.buckets[index].get_nodes()
 		self.left_buckets = table.buckets[:index]
@@ -146,15 +146,18 @@ class RoutingTable:
 		return [b for b in self.buckets if b.last_updated < hrago]
 
 	def remove_contact(self, node):
-		index = self.get_bucket_for(node)
+		index = self.get_bucket_index_for(node)
 		self.buckets[index].remove_node(node)
 
 	def is_new_node(self, node):
-		index = self.get_bucket_for(node)
+		index = self.get_bucket_index_for(node)
 		return self.buckets[index].is_new_node(node)
 
+	def add_bucket(self, bucket):
+		self.buckets.append(bucket)
+
 	def add_contact(self, node):
-		index = self.get_bucket_for(node)
+		index = self.get_bucket_index_for(node)
 		bucket = self.buckets[index]
 
 		# this will succeed unless the bucket is full
@@ -169,7 +172,7 @@ class RoutingTable:
 		else:
 			asyncio.ensure_future(self.protocol.call_ping(bucket.head()))
 
-	def get_bucket_for(self, node):
+	def get_bucket_index_for(self, node):
 		"""
 		Get the index of the bucket that the given node would fall into.
 		"""
@@ -179,6 +182,10 @@ class RoutingTable:
 				index = i
 				break
 		return index
+
+	def get_bucket_for(self, node):
+		idx = self.get_bucket_index_for(node)
+		return self.buckets[idx]
 
 	def find_neighbors(self, node, k=None, exclude=None):
 		k = k or self.ksize

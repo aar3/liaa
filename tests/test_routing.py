@@ -148,11 +148,11 @@ class TestRoutingTable:
 
 		node = mknode()
 		table.add_contact(node)
-		index = table.get_bucket_for(node)
+		index = table.get_bucket_index_for(node)
 		assert len(table.buckets[index]) == 1
 
 		table.remove_contact(node)
-		index = table.get_bucket_for(node)
+		index = table.get_bucket_index_for(node)
 		assert len(table.buckets[index]) == 0
 
 	def test_is_new_node_returns_true_when_node_is_new(self, mknode):

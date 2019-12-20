@@ -1,12 +1,23 @@
+import os
 import random
 import hashlib
-from struct import pack
+import asyncio
+import struct
+import umsgpack
 
 import pytest
 
+# pylint: disable=bad-continuation
+from kademlia.protocol import (
+	RPCProtocol,
+	RPCMessageQueue,
+	Datagram,
+	Header
+)
 from kademlia.network import Server, KademliaProtocol
 from kademlia.node import Node
 from kademlia.routing import RoutingTable, KBucket
+from kademlia.storage import ForgetfulStorage
 
 
 @pytest.yield_fixture
@@ -28,12 +39,45 @@ def mknode():
 		Make a node.  Created a random id if not specified.
 		"""
 		if intid is not None:
-			node_id = pack('>l', intid)
+			node_id = struct.pack('>l', intid)
 		if not node_id:
 			randbits = str(random.getrandbits(255))
 			node_id = hashlib.sha1(randbits.encode()).digest()
 		return Node(node_id, ip_addy, port)
 	return _mknode
+
+
+@pytest.fixture()
+def mkdgram():
+	def _mkdgram(header=Header.Request, msg_id=os.urandom(32), data=('funcname', 123)):
+		buff = header + hashlib.sha1(msg_id).digest() + umsgpack.packb(data)
+		return Datagram(buff)
+	return _mkdgram
+
+
+@pytest.fixture()
+def mk_kademlia_proto():
+	def _mk_kademlia_proto(node=None, storage=ForgetfulStorage(), ksize=3):
+		return KademliaProtocol(node, storage, ksize)
+	return _mk_kademlia_proto
+
+
+@pytest.fixture()
+def mkqueue():
+	def _mkqueue(msg_id=os.urandom(32)):
+		"""
+		Create a fake RPCMessageQueue
+		"""
+		loop = asyncio.get_event_loop()
+		fut = loop.create_future()
+		# pylint: disable=protected-access
+		proto = RPCProtocol()
+		timeout = loop.call_later(proto._wait, proto._timeout, msg_id)
+
+		queue = RPCMessageQueue()
+		queue.enqueue_fut(msg_id, fut, timeout)
+		return queue
+	return _mkqueue
 
 
 # pylint: disable=too-few-public-methods

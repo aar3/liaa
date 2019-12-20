@@ -13,6 +13,62 @@ from kademlia.utils import digest
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+MAX_PAYLOAD_SIZE = 8192
+
+# pylint: disable=too-few-public-methods
+class Header:
+	Request = b'\x00'
+	Response = b'\x01'
+
+
+class RPCMessageQueue:
+	def __init__(self):
+		self.items = {}
+
+	def remove_item(self, msg_id):
+		del self.items[msg_id]
+
+	def enqueue_fut(self, msg_id, fut, timeout):
+		self.items[msg_id] = (fut, timeout)
+
+	def get_fut(self, msg_id):
+		return self.items[msg_id]
+
+	def dequeue_fut(self, dgram):
+		if not dgram.id in self:
+			return False
+		fut, timeout = self.get_fut(dgram.id)
+		fut.set_result((True, dgram.data))
+		timeout.cancel()
+		del self.items[dgram.id]
+		return True
+
+	def __contains__(self, key):
+		return key in self.items
+
+	def __len__(self):
+		return len(self.items)
+
+
+class Datagram:
+	def __init__(self, buff):
+		self.buff = buff or []
+		self.action = self.buff[:1]
+		# pylint: disable=invalid-name
+		self.id = self.buff[1:21]
+		self.data = umsgpack.unpackb(self.buff[21:])
+
+		if self.has_valid_len() and not self.is_malformed():
+			self.funcname, self.args = self.data
+
+	def has_valid_len(self):
+		# if len(dgram) < 22, then there isnt enough data to unpack
+		# a request/response byte, and a msg id
+		return len(self.buff) >= 22
+
+	def is_malformed(self):
+		return not isinstance(self.data, list) or len(self.data) != 2
+
 
 class MalformedMessage(Exception):
 	pass
@@ -23,76 +79,74 @@ class RPCProtocol(asyncio.DatagramProtocol):
 	Protocol implementation using msgpack to encode messages and asyncio
 	to handle async sending / recieving.
 	"""
-	def __init__(self, wait_timeout=5):
+	def __init__(self, wait=5):
 		"""
 		Create a protocol instance.
 
 		Args:
-			wait_timeout (int): Time to wait for a response before giving up
+			wait (int): Time to wait for a response before giving up
 		"""
-		self._wait_timeout = wait_timeout
-		self._outstanding = {}
+		self._wait = wait
+		self._outstanding_msgs = {}
+		self._queue = RPCMessageQueue()
 		self.transport = None
 
 	def connection_made(self, transport):
 		self.transport = transport
-	
-	def datagram_received(self, data, addr):
-		log.debug("received datagram from %s", addr)
-		asyncio.ensure_future(self._solve_datagram(data, addr))
 
-	async def _solve_datagram(self, datagram, address):
-		if len(datagram) < 22:
-			log.warning("received datagram too small from %s, ignoring", address)
+	def dgram_received(self, data, addr):
+		log.debug("received dgram from %s", addr)
+		asyncio.ensure_future(self._solve_dgram(data, addr))
+
+	async def _solve_dgram(self, buff, address):
+		dgram = Datagram(buff)
+
+		if not dgram.has_valid_len():
+			log.warning("received invalid dgram from %s, ignoring", address)
 			return
 
-		msg_id = datagram[1:21]
-		data = umsgpack.unpackb(datagram[21:])
-
-		if datagram[:1] == b'\x00':
-			# schedule accepting request and returning the result
-			asyncio.ensure_future(self._accept_request(msg_id, data, address))
-		elif datagram[:1] == b'\x01':
-			self._accept_response(msg_id, data, address)
+		if dgram.action == Header.Request:
+			asyncio.ensure_future(self._accept_request(dgram, address))
+		elif dgram.action == Header.Response:
+			self._accept_response(dgram, address)
 		else:
-			# otherwise, don't know the format, don't do anything
 			log.debug("Received unknown message from %s, ignoring", address)
 
-	def _accept_response(self, msg_id, data, address):
-		msgargs = (b64encode(msg_id), address)
-		if msg_id not in self._outstanding:
+	def _accept_response(self, dgram, address):
+		msgargs = (b64encode(dgram.id), address)
+		if dgram.id not in self._outstanding_msgs:
 			log.warning("received unknown message %s from %s; ignoring", *msgargs)
 			return
 
-		log.debug("received response %s for message id %s from %s", data, *msgargs)
-		future, timeout = self._outstanding[msg_id]
-		timeout.cancel()
-		future.set_result((True, data))
-		del self._outstanding[msg_id]
+		log.debug("received response %s for message id %s from %s", dgram.data, *msgargs)
+		if not self._queue.dequeue_fut(dgram):
+			log.warning("could not mark datagram %s as received", dgram.id)
 
-	async def _accept_request(self, msg_id, data, address):
-		if not isinstance(data, list) or len(data) != 2:
-			raise MalformedMessage("Could not read packet: %s" % data)
-		funcname, args = data
-		func = getattr(self, "rpc_%s" % funcname, None)
+	async def _accept_request(self, dgram, address):
+		if dgram.is_malformed():
+			raise MalformedMessage("Could not read packet: %s" % dgram.data)
+
+		# these rpc_* functions will be implemented in sub-classes - be warned,
+		# this uses a bit of pythonic magic - TODO: consider explicit refactor
+		func = getattr(self, "rpc_%s" % dgram.funcname, None)
 		if func is None or not callable(func):
-			msgargs = (self.__class__.__name__, funcname)
+			msgargs = (self.__class__.__name__, dgram.funcname)
 			log.warning("%s has no callable method rpc_%s; ignoring request", *msgargs)
 			return
 
 		if not asyncio.iscoroutinefunction(func):
 			func = asyncio.coroutine(func)
 
-		response = await func(address, *args)
-		log.debug("sending response %s for msg id %s to %s", response, b64encode(msg_id), address)
-		txdata = b'\x01' + msg_id + umsgpack.packb(response)
+		response = await func(address, *dgram.args)
+		log.debug("sending response %s for msg id %s to %s", response, b64encode(dgram.id), address)
+		txdata = Header.Response + dgram.id + umsgpack.packb(response)
 		self.transport.sendto(txdata, address)
 
 	def _timeout(self, msg_id):
-		args = (b64encode(msg_id), self._wait_timeout)
+		args = (b64encode(msg_id), self._wait)
 		log.error("Did not received reply for msg id %s within %i seconds", *args)
-		self._outstanding[msg_id][0].set_result((False, None))
-		del self._outstanding[msg_id]
+		self._outstanding_msgs[msg_id][0].set_result((False, None))
+		del self._outstanding_msgs[msg_id]
 
 	def __getattr__(self, name):
 		"""
@@ -116,22 +170,22 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		except AttributeError:
 			pass
 
+		# here we define a function that creates a request using function name
+		# `name` and `*args`, sends it, and pushes it to the msg queue
 		def func(address, *args):
 			msg_id = sha1(os.urandom(32)).digest()
 			data = umsgpack.packb([name, args])
-			if len(data) > 8192:
+			if len(data) > MAX_PAYLOAD_SIZE:
 				raise MalformedMessage("Total length of function name and arguments cannot exceed 8K")
-			txdata = b'\x00' + msg_id + data
+			txdata = Header.Request + msg_id + data
 			log.debug("calling remote function %s on %s (msgid %s)", name, address, b64encode(msg_id))
 			self.transport.sendto(txdata, address)
 
+			# we assume python version >= 3.7
 			loop = asyncio.get_event_loop()
-			if hasattr(loop, 'create_future'):
-				future = loop.create_future()
-			else:
-				future = asyncio.Future()
-			timeout = loop.call_later(self._wait_timeout, self._timeout, msg_id)
-			self._outstanding[msg_id] = (future, timeout)
+			future = loop.create_future()
+			timeout = loop.call_later(self._wait, self._timeout, msg_id)
+			self._queue.enqueue_fut(msg_id, future, timeout)
 			return future
 
 		return func
@@ -146,7 +200,8 @@ class KademliaProtocol(RPCProtocol):
 
 	def get_refresh_ids(self):
 		"""
-		Get ids to search for to keep old buckets up to date.
+		Get list of node ids with which to search, in order to keep old
+		buckets up to date.
 		"""
 		ids = []
 		for bucket in self.router.lonely_buckets():
