@@ -3,6 +3,8 @@ from itertools import takewhile
 import operator
 from collections import OrderedDict
 from abc import abstractmethod, ABC
+# pylint: disable=wildcard-import,unused-wildcard-import
+from typing import *
 
 
 class IStorage(ABC):
@@ -92,3 +94,5 @@ class ForgetfulStorage(IStorage):
 		ikeys = self.data.keys()
 		ivalues = map(operator.itemgetter(1), self.data.values())
 		return zip(ikeys, ivalues)
+
+TForgetfulStorage = NewType("TForgetfulStorage", ForgetfulStorage)

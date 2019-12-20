@@ -1,5 +1,7 @@
 from operator import itemgetter
 import heapq
+# pylint: disable=unused-wildcard-import,wildcard-import
+from typing import *
 
 from kademlia.utils import hex_to_base_int
 
@@ -34,6 +36,9 @@ class Node:
 		"""
 		return self.long_id ^ node.long_id
 
+	def __eq__(self, other):
+		return self.ip == other.ip and self.port == other.port
+
 	def __iter__(self):
 		"""
 		Enables use of Node as a tuple - i.e., tuple(node) works.
@@ -46,6 +51,8 @@ class Node:
 	def __str__(self):
 		return "%s:%s" % (self.ip, str(self.port))
 
+
+TNode = NewType("TNode", Node)
 
 class NodeHeap:
 	"""
