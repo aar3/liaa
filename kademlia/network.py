@@ -55,7 +55,7 @@ class Server:
 			self.save_state_loop.cancel()
 
 	def _create_protocol(self):
-		return self.protocol_class(self.node, self.storage, self.ksize)
+		return self.protocol_class(self.node, self.ksize)
 
 	async def listen(self, port, interface='0.0.0.0'):
 		"""

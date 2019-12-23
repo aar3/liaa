@@ -6,6 +6,20 @@ import operator
 import asyncio
 
 
+class Sandbox:
+	def __init__(self, obj):
+		self.obj = obj
+		self.mem = {}
+
+	def stub(self, funcname, func):
+		self.mem[funcname] = getattr(self.obj, funcname)
+		setattr(self.obj, funcname, func)
+
+	def restore(self):
+		for funcname, func in self.mem.items():
+			setattr(self.obj, funcname, func)
+
+
 async def gather_dict(dic):
 	cors = list(dic.values())
 	results = await asyncio.gather(*cors)

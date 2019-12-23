@@ -6,6 +6,7 @@ import time
 from kademlia.rpc import RPCMessageQueue, Datagram
 from kademlia.protocol import KademliaProtocol
 from kademlia.storage import ForgetfulStorage
+from kademlia.utils import Sandbox
 
 
 class TestRPCMessageQueue:
@@ -59,15 +60,14 @@ class TestKademliaProtocol:
 	# pylint: disable=no-self-use
 	def test_can_init_protocol(self, mknode):
 		node = mknode(intid=1)
-		storage = ForgetfulStorage()
-		proto = KademliaProtocol(node, storage, ksize=3)
+		proto = KademliaProtocol(node, ksize=20)
+		proto.storage = ForgetfulStorage()
 		assert isinstance(proto, KademliaProtocol)
 
-	def test_can_refresh_ids(self, mknode, mkbucket, mk_kademlia_proto):
-		ksize = 3
-		proto = mk_kademlia_proto(node=mknode(), ksize=ksize)
+	def test_can_refresh_ids(self, mknode, mkbucket, fake_proto):
+		proto = fake_proto()
 		for _ in range(5):
-			bucket = mkbucket(ksize=ksize)
+			bucket = mkbucket(ksize=proto.router.ksize)
 			for _ in range(5):
 				node = mknode()
 				bucket.add_node(node)
@@ -82,9 +82,26 @@ class TestKademliaProtocol:
 		assert isinstance(to_refresh, list)
 		assert len(to_refresh) == 3
 
-	def test_rpc_stun_returns_node(self, mknode, mk_kademlia_proto):
-		ksize = 3
-		proto = mk_kademlia_proto(node=mknode(), ksize=ksize)
+	def test_rpc_stun_returns_node(self, mknode, fake_proto):
+		proto = fake_proto()
 		sender = mknode()
-		val = proto.rpc_stun(sender)
-		assert val == sender
+		assert sender == proto.rpc_stun(sender)
+
+	def test_rpc_ping_returns_requestors_id(self, mknode, fake_proto):
+		sender = mknode()
+		proto = fake_proto()
+
+		def ping_stub(sender, node_id):
+			return sender.id
+
+		def call_store_stub(node_to_ask, key, value):
+			return True
+
+		sandbox = Sandbox(proto)
+		sandbox.stub("call_store", call_store_stub)
+		sandbox.stub("rpc_ping", ping_stub)
+
+		source_id = proto.rpc_ping(sender, sender.id)
+		assert source_id == sender.id
+
+		sandbox.restore()

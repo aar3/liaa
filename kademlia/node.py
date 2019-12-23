@@ -45,6 +45,9 @@ class Node:
 		"""
 		return iter([self.id, self.ip, self.port])
 
+	def __hash__(self):
+		return self.long_id
+
 	def __repr__(self):
 		return repr([self.long_id, self.ip, self.port])
 

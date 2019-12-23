@@ -57,15 +57,8 @@ def mkdgram():
 
 
 @pytest.fixture()
-def mk_kademlia_proto():
-	def _mk_kademlia_proto(node=None, storage=ForgetfulStorage(), ksize=3):
-		return KademliaProtocol(node, storage, ksize)
-	return _mk_kademlia_proto
-
-
-@pytest.fixture()
 def mkqueue():
-	def _mkqueue(msg_id=os.urandom(32)):
+	def _mkqueue(msg_id=os.urandom(32), loop=loop):
 		"""
 		Create a fake RPCMessageQueue
 		"""
@@ -90,11 +83,19 @@ def mkbucket():
 
 
 # pylint: disable=too-few-public-methods
-class FakeProtocol:  # pylint: disable=too-few-public-methods
+class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
 	def __init__(self, source_id, ksize=20):
+		super(FakeProtocol, self).__init__(source_id, ksize=ksize)
 		self.router = RoutingTable(self, ksize, Node(source_id))
-		self.storage = {}
+		self.storage = ForgetfulStorage()
 		self.source_id = source_id
+
+@pytest.fixture()
+def fake_proto(mknode):
+	def _fake_proto(node=None):
+		node = node or mknode()
+		return FakeProtocol(node.id)
+	return _fake_proto
 
 
 # pylint: disable=too-few-public-methods

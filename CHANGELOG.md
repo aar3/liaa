@@ -9,3 +9,4 @@
 
 ### 12.22.19
 - [chore] add docstrings and typings
+- [enhancement] add tests for protocol module
