@@ -6,11 +6,12 @@ import pickle
 import asyncio
 import logging
 
-from kademlia.protocol import KademliaProtocol
+from kademlia.protocol import KademliaProtocol, TKademliaProtocol
 from kademlia.utils import digest
 from kademlia.storage import ForgetfulStorage
-from kademlia.node import Node
+from kademlia.node import Node, TNode, Resource
 from kademlia.crawling import ValueSpiderCrawl, NodeSpiderCrawl
+from typing import List, Tuple, Union, Optional
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -44,7 +45,19 @@ class Server:
 		self.refresh_loop = None
 		self.save_state_loop = None
 
-	def stop(self):
+	def stop(self) -> None:
+		"""
+		Stop a currently running server - all event loops, and close
+		all open network connections
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			None
+		"""
 		if self.transport is not None:
 			self.transport.close()
 
@@ -54,14 +67,36 @@ class Server:
 		if self.save_state_loop:
 			self.save_state_loop.cancel()
 
-	def _create_protocol(self):
+	def _create_protocol(self) -> TKademliaProtocol:
+		"""
+		Create an instance of the Kademlia protocol
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			KademliaProtocol:
+				Instance of the kademlia protocol
+		"""
 		return self.protocol_class(self.node, self.ksize)
 
-	async def listen(self, port, interface='0.0.0.0'):
+	async def listen(self, port: int, interface='0.0.0.0') -> None:
 		"""
-		Start listening on the given port.
-
+		Start our datagram endpoint listening on the given port
 		Provide interface="::" to accept ipv6 address
+
+		Parameters
+		----------
+			port: int
+				Port on which to listen
+			interface: str
+				Interface on which to bind port
+
+		Returns
+		-------
+			None
 		"""
 		loop = asyncio.get_event_loop()
 		listen = loop.create_datagram_endpoint(self._create_protocol, local_addr=(interface, port))
@@ -70,18 +105,38 @@ class Server:
 		# finally, schedule refreshing table
 		self.refresh_table()
 
-	def refresh_table(self):
+	def refresh_table(self, delay=3600) -> None:
+		"""
+		Refresh our routing table via a 
+
+		Parameters
+		----------
+			delay: int
+				Time to wait (secs) before executing future 
+
+		Returns
+		-------
+			None
+		"""
 		log.debug("Refreshing routing table")
 		asyncio.ensure_future(self._refresh_table())
 		loop = asyncio.get_event_loop()
-		self.refresh_loop = loop.call_later(3600, self.refresh_table)
+		self.refresh_loop = loop.call_later(delay, self.refresh_table)
 
-	async def _refresh_table(self):
+	async def _refresh_table(self) -> None:
 		"""
 		Refresh buckets that haven't had any lookups in the last hour
 		(per section 2.3 of the paper).
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			None
 		"""
-		results = []
+		results: List[asyncio.Future] = []
 		for node_id in self.protocol.get_refresh_ids():
 			node = Node(node_id)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
@@ -95,26 +150,43 @@ class Server:
 		for dkey, value in self.storage.iter_older_than(3600):
 			await self.set_digest(dkey, value)
 
-	def bootstrappable_neighbors(self):
+	def bootstrappable_neighbors(self) -> List[TNode]:
 		"""
-		Get a :class:`list` of (ip, port) :class:`tuple` pairs suitable for
-		use as an argument to the bootstrap method.
+		Get a list of (ip, port) tuple pairs suitable for use as an argument to 
+		the bootstrap method.
 
 		The server should have been bootstrapped
 		already - this is just a utility for getting some neighbors and then
 		storing them if this server is going down for a while.  When it comes
 		back up, the list of nodes can be used to bootstrap.
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			List[TNode]:
+				List of peers suitable for bootstrap use
 		"""
-		neighbors = self.protocol.router.find_neighbors(self.node)
+		neighbors: List[TNode] = self.protocol.router.find_neighbors(self.node)
 		return [tuple(n)[-2:] for n in neighbors]
 
-	async def bootstrap(self, addrs):
+	async def bootstrap(self, addrs) -> asyncio.Future:
 		"""
 		Bootstrap the server by connecting to other known nodes in the network.
 
-		Args:
-			addrs: A `list` of (ip, port) `tuple` pairs.  Note that only IP
-				   addresses are acceptable - hostnames will cause an error.
+		Parameters
+		----------
+			addrs: List[Tuple[str, int]]
+				Note that only IP addresses are acceptable - hostnames will 
+				cause an error.
+
+		Returns
+		-------
+			asyncio.Future:
+				scheduled callback for a NodeSpiderCrawl to continue crawling
+				network in order to find peers for self.node
 		"""
 		log.debug("Attempting to bootstrap node with %i initial contacts", len(addrs))
 		cos = list(map(self.bootstrap_node, addrs))
@@ -123,31 +195,54 @@ class Server:
 		spider = NodeSpiderCrawl(self.protocol, self.node, nodes, self.ksize, self.alpha)
 		return await spider.find()
 
-	async def bootstrap_node(self, addr):
+	async def bootstrap_node(self, addr: Tuple[str, int]) -> Optional[TNode]:
+		"""
+		Ping a given address so that both `addr` and `self.node` can know
+		about one another
+
+		Parameters
+		----------
+			addr: Tuple[str, int]
+				Address of peer to ping
+		
+		Returns
+		-------
+			Optiona[Node]:
+				None if ping was unsuccessful, or peer as Node if ping
+				was successful
+		"""
 		result = await self.protocol.ping(addr, self.node.id)
 		return Node(result[1], addr[0], addr[1]) if result[0] else None
 
-	async def get(self, key):
+	async def get(self, key: Union[str, bytes]) -> asyncio.Future:
 		"""
-		Get a key if the network has it.
+		Crawl the network in order to find a given key
 
-		Returns:
-			:class:`None` if not found, the value otherwise.
+		Parameters
+		----------
+			key: Union[str, bytes]
+				Key to find in network
+
+		Returns
+		-------
+			asyncio.Future:
+				A recursive call to ValueSpiderCrawl.find which will terminate
+				either when the value is find or the search is exhausted
 		"""
 		log.info("Looking up key %s", key)
 		dkey = digest(key)
 		# if this node has it, return it
 		if self.storage.get(dkey) is not None:
 			return self.storage.get(dkey)
-		node = Node(dkey)
-		nearest = self.protocol.router.find_neighbors(node)
+		rsrc = Resource(dkey)
+		nearest = self.protocol.router.find_neighbors(rsrc)
 		if not nearest:
 			log.warning("There are no known neighbors to get key %s", key)
 			return None
-		spider = ValueSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
+		spider = ValueSpiderCrawl(self.protocol, rsrc, nearest, self.ksize, self.alpha)
 		return await spider.find()
 
-	async def set(self, key, value):
+	async def set(self, key: Union[bytes, str], value: Any) -> asyncio.Future:
 		"""
 		Set the given string key to the given value in the network.
 		"""

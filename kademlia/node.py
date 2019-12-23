@@ -3,24 +3,32 @@ import heapq
 # pylint: disable=unused-wildcard-import,wildcard-import
 from typing import *
 
-from kademlia.utils import hex_to_base_int
+from kademlia.utils import hex_to_base_int, digest
 
 
 class Node:
-	"""
-	Simple object to encapsulate the concept of a Node (minimally an ID, but
-	also possibly an IP and port if this represents a node on the network).
-	This class should generally not be instantiated directly, as it is a low
-	level construct mostly used by the router.
-	"""
-	def __init__(self, node_id, ip=None, port=None):
-		"""
-		Create a Node instance.
 
-		Args:
-			node_id (int): A value between 0 and 2^160
-			ip (string): Optional IP address where this Node lives
-			port (int): Optional port for this Node (set when IP is set)
+	def __init__(self, 
+		node_id: int,
+		 ip: Optional[str] = None, 
+		 port: Optional[int] = None
+	):
+		"""
+		Node
+		
+		Simple object to encapsulate the concept of a Node (minimally an ID, but
+		also possibly an IP and port if this represents a node on the network).
+		This class should generally not be instantiated directly, as it is a low
+		level construct mostly used by the router.
+
+		Parameters
+		----------
+			node_id: int
+				A value between 0 and 2^160
+			ip: str
+				Optional IP address where this Node lives
+			port:
+				Optional port for this Node (set when IP is set)
 		"""
 		self.id = node_id  # pylint: disable=invalid-name
 		self.ip = ip  # pylint: disable=invalid-name
@@ -53,6 +61,18 @@ class Node:
 
 	def __str__(self):
 		return "%s:%s" % (self.ip, str(self.port))
+
+
+class Resource:
+	def __init__(self, key: Union[str, bytes]):
+		"""
+		Resource
+
+		Is a small wrapper abstraction used to represent a non-node
+		resource in the network (i.e., a value)
+		"""
+		self.key = key
+		self.long_id = hex_to_base_int(digest(self.key))
 
 
 TNode = NewType("TNode", Node)
