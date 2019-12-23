@@ -3,11 +3,8 @@ import random
 import time
 
 # pylint: disable=bad-continuation
-from kademlia.protocol import (
-	KademliaProtocol,
-	RPCMessageQueue,
-	Datagram,
-)
+from kademlia.rpc import RPCMessageQueue, Datagram
+from kademlia.protocol import KademliaProtocol
 from kademlia.storage import ForgetfulStorage
 
 
@@ -84,3 +81,10 @@ class TestKademliaProtocol:
 		to_refresh = proto.get_refresh_ids()
 		assert isinstance(to_refresh, list)
 		assert len(to_refresh) == 3
+
+	def test_rpc_stun_returns_node(self, mknode, mk_kademlia_proto):
+		ksize = 3
+		proto = mk_kademlia_proto(node=mknode(), ksize=ksize)
+		sender = mknode()
+		val = proto.rpc_stun(sender)
+		assert val == sender

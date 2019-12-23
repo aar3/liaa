@@ -1,198 +1,22 @@
-import os
 import asyncio
 import logging
 import random
-from base64 import b64encode
-from hashlib import sha1
+# pylint: disable=unused-wildcard-import,wildcard-import
+from typing import *
 
-import umsgpack
-
-from kademlia.node import Node
+from kademlia.node import Node, TNode
 from kademlia.routing import RoutingTable
-from kademlia.utils import digest
+from kademlia.rpc import RPCProtocol
+from kademlia.utils import digest, hex_to_base_int
+from kademlia.storage import TForgetfulStorage
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-MAX_PAYLOAD_SIZE = 8192
 
-# pylint: disable=too-few-public-methods
-class Header:
-	Request = b'\x00'
-	Response = b'\x01'
-
-
-class RPCMessageQueue:
-	def __init__(self):
-		self.items = {}
-
-	def remove_item(self, msg_id):
-		del self.items[msg_id]
-
-	def enqueue_fut(self, msg_id, fut, timeout):
-		self.items[msg_id] = (fut, timeout)
-
-	def get_fut(self, msg_id):
-		return self.items[msg_id]
-
-	def dequeue_fut(self, dgram):
-		if not dgram.id in self:
-			return False
-		fut, timeout = self.get_fut(dgram.id)
-		fut.set_result((True, dgram.data))
-		timeout.cancel()
-		del self.items[dgram.id]
-		return True
-
-	def __contains__(self, key):
-		return key in self.items
-
-	def __len__(self):
-		return len(self.items)
-
-
-class Datagram:
-	def __init__(self, buff):
-		self.buff = buff or []
-		self.action = self.buff[:1]
-		# pylint: disable=invalid-name
-		self.id = self.buff[1:21]
-		self.data = umsgpack.unpackb(self.buff[21:])
-
-		if self.has_valid_len() and not self.is_malformed():
-			self.funcname, self.args = self.data
-
-	def has_valid_len(self):
-		# if len(dgram) < 22, then there isnt enough data to unpack
-		# a request/response byte, and a msg id
-		return len(self.buff) >= 22
-
-	def is_malformed(self):
-		return not isinstance(self.data, list) or len(self.data) != 2
-
-
-class MalformedMessage(Exception):
-	pass
-
-
-class RPCProtocol(asyncio.DatagramProtocol):
-	"""
-	Protocol implementation using msgpack to encode messages and asyncio
-	to handle async sending / recieving.
-	"""
-	def __init__(self, wait=5):
-		"""
-		Create a protocol instance.
-
-		Args:
-			wait (int): Time to wait for a response before giving up
-		"""
-		self._wait = wait
-		self._outstanding_msgs = {}
-		self._queue = RPCMessageQueue()
-		self.transport = None
-
-	def connection_made(self, transport):
-		self.transport = transport
-
-	def dgram_received(self, data, addr):
-		log.debug("received dgram from %s", addr)
-		asyncio.ensure_future(self._solve_dgram(data, addr))
-
-	async def _solve_dgram(self, buff, address):
-		dgram = Datagram(buff)
-
-		if not dgram.has_valid_len():
-			log.warning("received invalid dgram from %s, ignoring", address)
-			return
-
-		if dgram.action == Header.Request:
-			asyncio.ensure_future(self._accept_request(dgram, address))
-		elif dgram.action == Header.Response:
-			self._accept_response(dgram, address)
-		else:
-			log.debug("Received unknown message from %s, ignoring", address)
-
-	def _accept_response(self, dgram, address):
-		msgargs = (b64encode(dgram.id), address)
-		if dgram.id not in self._outstanding_msgs:
-			log.warning("received unknown message %s from %s; ignoring", *msgargs)
-			return
-
-		log.debug("received response %s for message id %s from %s", dgram.data, *msgargs)
-		if not self._queue.dequeue_fut(dgram):
-			log.warning("could not mark datagram %s as received", dgram.id)
-
-	async def _accept_request(self, dgram, address):
-		if dgram.is_malformed():
-			raise MalformedMessage("Could not read packet: %s" % dgram.data)
-
-		# these rpc_* functions will be implemented in sub-classes - be warned,
-		# this uses a bit of pythonic magic - TODO: consider explicit refactor
-		func = getattr(self, "rpc_%s" % dgram.funcname, None)
-		if func is None or not callable(func):
-			msgargs = (self.__class__.__name__, dgram.funcname)
-			log.warning("%s has no callable method rpc_%s; ignoring request", *msgargs)
-			return
-
-		if not asyncio.iscoroutinefunction(func):
-			func = asyncio.coroutine(func)
-
-		response = await func(address, *dgram.args)
-		log.debug("sending response %s for msg id %s to %s", response, b64encode(dgram.id), address)
-		txdata = Header.Response + dgram.id + umsgpack.packb(response)
-		self.transport.sendto(txdata, address)
-
-	def _timeout(self, msg_id):
-		args = (b64encode(msg_id), self._wait)
-		log.error("Did not received reply for msg id %s within %i seconds", *args)
-		self._outstanding_msgs[msg_id][0].set_result((False, None))
-		del self._outstanding_msgs[msg_id]
-
-	def __getattr__(self, name):
-		"""
-		If name begins with "_" or "rpc_", returns the value of
-		the attribute in question as normal.
-
-		Otherwise, returns the value as normal *if* the attribute
-		exists, but does *not* raise AttributeError if it doesn't.
-
-		Instead, returns a closure, func, which takes an argument
-		"address" and additional arbitrary args (but not kwargs).
-
-		func attempts to call a remote method "rpc_{name}",
-		passing those args, on a node reachable at address.
-		"""
-		if name.startswith("_") or name.startswith("rpc_"):
-			return getattr(super(), name)
-
-		try:
-			return getattr(super(), name)
-		except AttributeError:
-			pass
-
-		# here we define a function that creates a request using function name
-		# `name` and `*args`, sends it, and pushes it to the msg queue
-		def func(address, *args):
-			msg_id = sha1(os.urandom(32)).digest()
-			data = umsgpack.packb([name, args])
-			if len(data) > MAX_PAYLOAD_SIZE:
-				raise MalformedMessage("Total length of function name and arguments cannot exceed 8K")
-			txdata = Header.Request + msg_id + data
-			log.debug("calling remote function %s on %s (msgid %s)", name, address, b64encode(msg_id))
-			self.transport.sendto(txdata, address)
-
-			# we assume python version >= 3.7
-			loop = asyncio.get_event_loop()
-			future = loop.create_future()
-			timeout = loop.call_later(self._wait, self._timeout, msg_id)
-			self._queue.enqueue_fut(msg_id, future, timeout)
-			return future
-
-		return func
-
+RPCFindValueReturn = Union[List[Tuple[int, str, int]], Dict[str, Any]]
 
 class KademliaProtocol(RPCProtocol):
-	def __init__(self, source_node, storage, ksize):
+	def __init__(self, source_node: TNode, storage: TForgetfulStorage, ksize: int):
 		RPCProtocol.__init__(self)
 		self.router = RoutingTable(self, ksize, source_node)
 		self.storage = storage
@@ -202,6 +26,15 @@ class KademliaProtocol(RPCProtocol):
 		"""
 		Get list of node ids with which to search, in order to keep old
 		buckets up to date.
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			ids: List[int]
+				ids of buckets that have not been updated since 3600
 		"""
 		ids = []
 		for bucket in self.router.lonely_buckets():
@@ -209,43 +42,145 @@ class KademliaProtocol(RPCProtocol):
 			ids.append(rid)
 		return ids
 
-	def rpc_stun(self, sender):  # pylint: disable=no-self-use
+	def rpc_stun(self, sender: TNode) -> TNode:  # pylint: disable=no-self-use
 		return sender
 
-	def rpc_ping(self, sender, nodeid):
-		source = Node(nodeid, sender[0], sender[1])
+	def rpc_ping(self, sender: Tuple[str, int], node_id: int) -> int:
+		"""
+		Ping a given node
+
+		Parameters
+		----------
+			sender: Tuple
+				Address of sender that initiated ping
+			node_id: int
+				ID of sender that initated ping
+
+		Returns
+		-------
+			int:
+				ID of sending node
+		"""
+		source = Node(node_id, sender[0], sender[1])
 		self.welcome_if_new(source)
 		return self.source_node.id
 
-	def rpc_store(self, sender, nodeid, key, value):
-		source = Node(nodeid, sender[0], sender[1])
+	def rpc_store(self, sender: TNode, node_id: int, key: int, value: Any) -> bool:
+		"""
+		Store data from a given sender
+
+		Parameters
+		----------
+			sender: Node
+				Node that is initiating/requesting store
+			node_id: int
+				ID of node that is initiating/requesting store
+			key: str
+				ID of resource to be stored
+			value: Any
+				Payload to be stored at `key`
+
+		Returns
+		-------
+			bool:
+				Indicator of successful operation
+		"""
+		source = Node(node_id, sender[0], sender[1])
 		self.welcome_if_new(source)
 		log.debug("got a store request from %s, storing '%s'='%s'", sender, key.hex(), value)
 		self.storage[key] = value
 		return True
 
-	def rpc_find_node(self, sender, nodeid, key):
-		log.info("finding neighbors of %i in local table", int(nodeid.hex(), 16))
-		source = Node(nodeid, sender[0], sender[1])
+	def rpc_find_node(self, sender: TNode, node_id: int, key: int) -> List[Tuple[int, str, int]]:
+		"""
+		Find the node storing a given key
+
+		Parameters
+		----------
+			sender: Node
+				The node initiating the request
+			node_id: int
+				ID of the node initiating the request
+			key: int
+				ID of resource to be located
+
+		Returns
+		-------
+			List[Tuple[int, str, int]]:
+				Addresses of closest neighbors in regards to resource `key`
+		"""
+		log.info("finding neighbors of %i in local table", hex_to_base_int(node_id.hex()))
+		source = Node(node_id, sender[0], sender[1])
 		self.welcome_if_new(source)
 		node = Node(key)
 		neighbors = self.router.find_neighbors(node, exclude=source)
 		return list(map(tuple, neighbors))
 
-	def rpc_find_value(self, sender, nodeid, key):
-		source = Node(nodeid, sender[0], sender[1])
+	# pylint: disable=line-too-long
+	def rpc_find_value(self, sender: TNode, node_id: int, key: int) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
+		"""
+		Return the value at a given key, via a given sender
+
+		Parameters
+		----------
+			sender: Node
+				Node at which key is stored
+			node_id: int
+				ID of node at which key is stored
+			key: int
+				ID of resource to be found
+
+		Returns
+		-------
+			Union[List[Tuple[int, str, int]], Dict[str, Any]]:
+				Will be either the given value indexed in a hashmap if the value is
+				found, or will recursively attempt to find node at which key is
+				stored via calls to `rpc_find_node`
+		"""
+		source = Node(node_id, sender[0], sender[1])
 		self.welcome_if_new(source)
 		value = self.storage.get(key, None)
 		if value is None:
-			return self.rpc_find_node(sender, nodeid, key)
-		return {'value': value}
+			return self.rpc_find_node(sender, node_id, key)
+		return {"value": value}
 
-	async def call_find_node(self, node_to_ask, node_to_find):
+	async def call_find_node(self, node_to_ask: TNode, node_to_find: TNode) -> List[Tuple[int, str, int]]:
+		"""
+		Dial a given node_to_ask in order to find node_to_find
+
+		Parameters
+		----------
+			node_to_ask: Node
+				Node to ask regarding node_to_find
+			node_to_find: Node
+				Node that this call is attempting to find
+
+		Returns
+		-------
+			List[Tuple[int, str, int]]:
+				Nodes closes to node_to_find which to continue search
+		"""
 		address = (node_to_ask.ip, node_to_ask.port)
 		result = await self.find_node(address, self.source_node.id, node_to_find.id)
 		return self.handle_call_response(result, node_to_ask)
 
-	async def call_find_value(self, node_to_ask, node_to_find):
+	async def call_find_value(self, node_to_ask: TNode, node_to_find: TNode) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
+		"""
+		Dial a given node_to_ask in order to find a value on node_to_find
+
+		Parameters
+		----------
+			node_to_ask: Node
+				Node to ask in order to find node_to_find to retrieve a given value
+			node_to_find: Node
+				Node that this call is attempting to find
+
+		Returns
+		-------
+			Union[List[Tuple[int, str, int]], Dict[str, Any]]:
+				Either the list of nodes clos'er' to the key associated with this
+				value, or the actual value
+		"""
 		address = (node_to_ask.ip, node_to_ask.port)
 		result = await self.find_value(address, self.source_node.id, node_to_find.id)
 		return self.handle_call_response(result, node_to_ask)
@@ -290,7 +225,7 @@ class KademliaProtocol(RPCProtocol):
 				asyncio.ensure_future(self.call_store(node, key, value))
 		self.router.add_contact(node)
 
-	def handle_call_response(self, result, node):
+	def handle_call_response(self, result: Any, node: TNode):
 		"""
 		If we get a response, add the node to the routing table.  If
 		we get no response, make sure it's removed from the routing table.
@@ -303,3 +238,5 @@ class KademliaProtocol(RPCProtocol):
 		log.info("got successful response from %s", node)
 		self.welcome_if_new(node)
 		return result
+
+TKademliaProtocol = NewType("TKademliaProtocol", KademliaProtocol)

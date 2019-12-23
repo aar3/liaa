@@ -8,14 +8,15 @@ import umsgpack
 import pytest
 
 # pylint: disable=bad-continuation
-from kademlia.protocol import (
+from kademlia.rpc import (
 	RPCProtocol,
 	RPCMessageQueue,
 	Datagram,
 	Header
 )
-from kademlia.network import Server, KademliaProtocol
+from kademlia.network import Server
 from kademlia.node import Node
+from kademlia.protocol import KademliaProtocol
 from kademlia.routing import RoutingTable, KBucket
 from kademlia.storage import ForgetfulStorage
 

@@ -1,0 +1,294 @@
+import asyncio
+import base64
+import hashlib
+import logging
+import os
+# pylint: disable=unused-wildcard-import,wildcard-import
+from typing import *
+
+import umsgpack
+
+from kademlia.exception import MalformedMessage
+
+log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+MAX_PAYLOAD_SIZE = 8192
+
+# pylint: disable=too-few-public-methods
+class Header:
+	Request = b'\x00'
+	Response = b'\x01'
+
+
+class RPCMessageQueue:
+	def __init__(self):
+		self.items = {}
+
+	def remove_item(self, msg_id):
+		del self.items[msg_id]
+
+	def enqueue_fut(self, msg_id, fut, timeout):
+		self.items[msg_id] = (fut, timeout)
+
+	def get_fut(self, msg_id):
+		return self.items[msg_id]
+
+	def dequeue_fut(self, dgram):
+		if not dgram.id in self:
+			return False
+		fut, timeout = self.get_fut(dgram.id)
+		fut.set_result((True, dgram.data))
+		timeout.cancel()
+		del self.items[dgram.id]
+		return True
+
+	def __contains__(self, key):
+		return key in self.items
+
+	def __len__(self):
+		return len(self.items)
+
+
+TRPCMessageQueue = NewType("TRPCMessageQueue", RPCMessageQueue)
+
+
+class Datagram:
+	"""
+	Datagram
+
+	A wrapper over a byte array that is used to represent data
+	passed to and from each peer in the network
+	"""
+	def __init__(self, buff: bytes):
+		self.buff = buff or []
+		self.action = self.buff[:1]
+		# pylint: disable=invalid-name
+		self.id = self.buff[1:21]
+		self.data = umsgpack.unpackb(self.buff[21:])
+
+		if self.has_valid_len() and not self.is_malformed():
+			self.funcname, self.args = self.data
+
+	def has_valid_len(self) -> bool:
+		"""
+		Determine if a datagram's buffer is long enough to be processed
+
+		If len(dgram) < 22, then there isnt enough data to unpack a
+		request/response byte, and a msg id
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			bool
+		"""
+		return len(self.buff) >= 22
+
+	def is_malformed(self) -> bool:
+		"""
+		Determine if a datagram is invalid/corrupted by seeing if its
+		data is a byte array, as well as whether or not is data consists
+		of two parts - a RPC function name, and RPC function args
+
+		Parameters
+		----------
+			None
+
+		Return
+		------
+			None
+		"""
+		return not isinstance(self.data, list) or len(self.data) != 2
+
+
+TDatagram = NewType("TDatagram", Datagram)
+
+
+class RPCProtocol(asyncio.DatagramProtocol):
+	"""
+	Protocol implementation using msgpack to encode messages and asyncio
+	to handle async sending / recieving.
+	"""
+	def __init__(self, wait: int = 5):
+		self._wait = wait
+		self._outstanding_msgs: Dict[int, Tuple[asyncio.Future, asyncio.Handle]] = {}
+		self._queue: TRPCMessageQueue = RPCMessageQueue()
+		self.transport = None
+
+	def connection_made(self, transport: asyncio.Handle) -> None:
+		"""
+		Called when a connection is made. (overload from BaseProtocol)
+
+		Parameters
+		----------
+			transport: asyncio.Handle
+				The transport representing the connection. The protocol is
+				responsible for storing the reference to its transport
+
+		Returns
+		-------
+			None
+		"""
+		self.transport = transport
+
+	def datagram_received(self, data: Tuple[str, bytes], addr: Tuple[str, int]) -> None:
+		"""
+		Called when a datagram is received.
+
+		Parameters
+		----------
+			data: bytes
+				object containing the incoming data.
+			addr: Tuple
+				address of the peer sending the data; the exact format depends on the transport.
+
+		Returns
+		-------
+			None
+		"""
+		log.debug("received dgram from %s", addr)
+		asyncio.ensure_future(self._solve_dgram(data, addr))
+
+	async def _solve_dgram(self, buff: bytes, address: Tuple[str, int]) -> None:
+		"""
+		Responsible for processing an incoming datagram
+
+		Parameters
+		----------
+			buff: bytes
+				Data to be processed
+			address: Tuple
+				Address of sending peer
+
+		Returns
+		-------
+			None
+		"""
+		dgram = Datagram(buff)
+
+		if not dgram.has_valid_len():
+			log.warning("received invalid dgram from %s, ignoring", address)
+			return
+
+		if dgram.action == Header.Request:
+			asyncio.ensure_future(self._accept_request(dgram, address))
+		elif dgram.action == Header.Response:
+			self._accept_response(dgram, address)
+		else:
+			log.debug("Received unknown message from %s, ignoring", address)
+
+	def _accept_response(self, dgram: TDatagram, address: Tuple[str, int]) -> None:
+		"""
+		Processor for incoming responses
+
+		Parameters
+		----------
+			dgram: Datagram
+				Datagram representing incoming message from peer
+			address: Tuple
+				Address of peer receiving response
+
+		Returns
+		-------
+			None
+		"""
+		msgargs = (base64.b64encode(dgram.id), address)
+		if dgram.id not in self._outstanding_msgs:
+			log.warning("received unknown message %s from %s; ignoring", *msgargs)
+			return
+
+		log.debug("received response %s for message id %s from %s", dgram.data, *msgargs)
+		if not self._queue.dequeue_fut(dgram):
+			log.warning("could not mark datagram %s as received", dgram.id)
+
+	async def _accept_request(self, dgram: TDatagram, address: Tuple[str, int]) -> None:
+		"""
+		Process an incoming request datagram as well as its RPC response
+
+		Parameters
+		----------
+			dgram: Datagram
+				Incoming datagram used to identify peer, process request, and pass
+				sending peer's data
+			address: Tuple
+				Address of sender
+
+		Returns
+		-------
+			None
+		"""
+		if dgram.is_malformed():
+			raise MalformedMessage("Could not read packet: %s" % dgram.data)
+
+		# these rpc_* functions will be implemented in sub-classes - be warned,
+		# this uses a bit of pythonic magic - TODO: consider explicit refactor
+		func = getattr(self, "rpc_%s" % dgram.funcname, None)
+		if func is None or not callable(func):
+			msgargs = (self.__class__.__name__, dgram.funcname)
+			log.warning("%s has no callable method rpc_%s; ignoring request", *msgargs)
+			return
+
+		if not asyncio.iscoroutinefunction(func):
+			func = asyncio.coroutine(func)
+
+		response = await func(address, *dgram.args)
+		# pylint: disable=bad-continuation
+		log.debug("sending response %s for msg id %s to %s", response,
+			base64.b64encode(dgram.id), address)
+		txdata = Header.Response + dgram.id + umsgpack.packb(response)
+		self.transport.sendto(txdata, address)
+
+	def _timeout(self, msg_id: int) -> None:
+		"""
+		Make a given datagram timeout
+
+		Parameters
+		----------
+			msg_id: int
+				ID of datagram future to cancel
+
+		Returns
+		-------
+			None
+		"""
+		args = (base64.b64encode(msg_id), self._wait)
+		log.error("Did not received reply for msg id %s within %i seconds", *args)
+		self._outstanding_msgs[msg_id][0].set_result((False, None))
+		del self._outstanding_msgs[msg_id]
+
+	def __getattr__(self, name: str) -> Union[asyncio.Future, Callable[[Any], None]]:
+		# we do this just to be explicit. all non-rpc methods (or helper/utility)
+		# functions should be private with a leading underscore. all rpc methods
+		# should start with 'rpc_'
+		if name.startswith("_") or name.startswith("rpc_"):
+			return getattr(super(), name)
+
+		try:
+			# else we follow normal getattr behavior (same as above)
+			return getattr(super(), name)
+		except AttributeError:
+			pass
+
+		# here we define a catchall function that creates a request using a given
+		# function name and *args. these *args are sent and pushed to the msg queue
+		# as futures.  this closure being called means that we are trying to execute
+		# a function name that is not part of the base Kademlia rpc_* protocol
+		def func(address, *args):
+			msg_id = hashlib.sha1(os.urandom(32)).digest()
+			data = umsgpack.packb([name, args])
+			if len(data) > MAX_PAYLOAD_SIZE:
+				raise MalformedMessage("Total length of function name and arguments cannot exceed 8K")
+			txdata = Header.Request + msg_id + data
+			log.debug("calling remote function %s on %s (msgid %s)", name, address, base64.b64encode(msg_id))
+			self.transport.sendto(txdata, address)
+
+			# we assume python version >= 3.7
+			loop = asyncio.get_event_loop()
+			future = loop.create_future()
+			timeout = loop.call_later(self._wait, self._timeout, msg_id)
+			self._queue.enqueue_fut(msg_id, future, timeout)
+			return future
+
+		return func
