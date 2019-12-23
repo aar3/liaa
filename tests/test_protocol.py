@@ -6,7 +6,6 @@ import time
 from kademlia.rpc import RPCMessageQueue, Datagram
 from kademlia.protocol import KademliaProtocol
 from kademlia.storage import ForgetfulStorage
-from kademlia.utils import Sandbox
 
 
 class TestRPCMessageQueue:
@@ -87,21 +86,23 @@ class TestKademliaProtocol:
 		sender = mknode()
 		assert sender == proto.rpc_stun(sender)
 
-	def test_rpc_ping_returns_requestors_id(self, mknode, fake_proto):
+	def test_rpc_ping_returns_requestors_id(self, mknode, fake_proto, sandbox):
 		sender = mknode()
 		proto = fake_proto()
 
+		# pylint: disable=unused-argument
 		def ping_stub(sender, node_id):
 			return sender.id
 
+		# pylint: disable=unused-argument
 		def call_store_stub(node_to_ask, key, value):
 			return True
 
-		sandbox = Sandbox(proto)
-		sandbox.stub("call_store", call_store_stub)
-		sandbox.stub("rpc_ping", ping_stub)
+		box = sandbox(proto)
+		box.stub("call_store", call_store_stub)
+		box.stub("rpc_ping", ping_stub)
 
 		source_id = proto.rpc_ping(sender, sender.id)
 		assert source_id == sender.id
 
-		sandbox.restore()
+		box.restore()

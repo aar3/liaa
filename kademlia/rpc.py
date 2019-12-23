@@ -8,6 +8,7 @@ from typing import *
 
 import umsgpack
 
+from kademlia.node import Node, TNode
 from kademlia.exception import MalformedMessage
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -50,6 +51,85 @@ class RPCMessageQueue:
 
 
 TRPCMessageQueue = NewType("TRPCMessageQueue", RPCMessageQueue)
+
+
+class RPCFindResponse:
+	def __init__(self, response):
+		"""
+		RPCFindResponse
+
+		A wrapper for the result of a RPC find.
+
+		Parameters
+		----------
+			response: Tuple[bool, Union[List[Tuple[int, str, int]], Dict[str, Any]]]
+				This will be a tuple of (<response received>, <value>)
+				where <value> will be a list of tuples if not found or
+				a dictionary of {'value': v} where v is the value desired
+		"""
+		self.response = response
+
+	def did_happen(self) -> bool:
+		"""
+		Did the other host actually respond?
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			bool:
+				Indicator of host response
+		"""
+		return self.response[0]
+
+	def has_value(self) -> bool:
+		"""
+		Return whether or not the response has a value
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			bool:
+				Whether or not the value of the response contains a found value
+		"""
+		return isinstance(self.response[1], dict)
+
+	def get_value(self) -> Any:
+		"""
+		Get the value/payload from a response that contains a value
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			Any:
+				Value of the response payload
+		"""
+		return self.response[1]['value']
+
+	def get_node_list(self) -> List[TNode]:
+		"""
+		Get the node list in the response.  If there's no value, this should
+		be set.
+
+		Parameters
+		----------
+			None
+
+		Returns
+		-------
+			List[TNode]:
+				List of nodes returned from find response
+		"""
+		nodelist = self.response[1] or []
+		return [Node(*nodeple) for nodeple in nodelist]
 
 
 class Datagram:
@@ -107,11 +187,18 @@ TDatagram = NewType("TDatagram", Datagram)
 
 
 class RPCProtocol(asyncio.DatagramProtocol):
-	"""
-	Protocol implementation using msgpack to encode messages and asyncio
-	to handle async sending / recieving.
-	"""
 	def __init__(self, wait: int = 5):
+		"""
+		RPCProtocol
+
+		Protocol implementation using msgpack to encode messages and asyncio
+		to handle async sending / recieving.
+
+		Parameters
+		----------
+			wait: int
+				Network connection timeout (default=5)
+		"""
 		self._wait = wait
 		self._outstanding_msgs: Dict[int, Tuple[asyncio.Future, asyncio.Handle]] = {}
 		self._queue: TRPCMessageQueue = RPCMessageQueue()
@@ -222,8 +309,14 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		if dgram.is_malformed():
 			raise MalformedMessage("Could not read packet: %s" % dgram.data)
 
-		# these rpc_* functions will be implemented in sub-classes - be warned,
-		# this uses a bit of pythonic magic - TODO: consider explicit refactor
+		# basically, when we execute an operation such as protocol.ping(), we will
+		# send 'ping' as the function name, at which point, we concat 'rpc_' onto
+		# the function name so that when we call getattr(self, funcname) we will
+		# get the rpc version of the fucname
+
+		# FIXME: explore if there is a more explicit, non-hackish way to execute
+		# these rpc methods
+
 		func = getattr(self, "rpc_%s" % dgram.funcname, None)
 		if func is None or not callable(func):
 			msgargs = (self.__class__.__name__, dgram.funcname)
@@ -259,9 +352,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		del self._outstanding_msgs[msg_id]
 
 	def __getattr__(self, name: str) -> Union[asyncio.Future, Callable[[Any], None]]:
-		# we do this just to be explicit. all non-rpc methods (or helper/utility)
-		# functions should be private with a leading underscore. all rpc methods
-		# should start with 'rpc_'
+
 		if name.startswith("_") or name.startswith("rpc_"):
 			return getattr(super(), name)
 
@@ -273,7 +364,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 
 		# here we define a catchall function that creates a request using a given
 		# function name and *args. these *args are sent and pushed to the msg queue
-		# as futures.  this closure being called means that we are trying to execute
+		# as futures. this closure being called means that we are trying to execute
 		# a function name that is not part of the base Kademlia rpc_* protocol
 		def func(address, *args):
 			msg_id = hashlib.sha1(os.urandom(32)).digest()

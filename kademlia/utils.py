@@ -4,43 +4,60 @@ General catchall for functions that don't make sense as methods.
 import hashlib
 import operator
 import asyncio
+from typing import Dict, Any, List, Union
 
 
-class Sandbox:
-	def __init__(self, obj):
-		self.obj = obj
-		self.mem = {}
+async def gather_dict(dic: Dict[str, Any]) -> Dict[str, Any]:
+	"""
+	Execute a list of coroutines and return the results
+	in a hashmap
 
-	def stub(self, funcname, func):
-		self.mem[funcname] = getattr(self.obj, funcname)
-		setattr(self.obj, funcname, func)
+	Parameters
+	----------
+		dic: Dict[str, Any]
+			Hashmap of coroutines to be execute
 
-	def restore(self):
-		for funcname, func in self.mem.items():
-			setattr(self.obj, funcname, func)
-
-
-async def gather_dict(dic):
+	Returns
+	-------
+		Dict[str, Any]:
+			Results of executed coroutines
+	"""
 	cors = list(dic.values())
 	results = await asyncio.gather(*cors)
 	return dict(zip(dic.keys(), results))
 
 
-def digest(string):
-	if not isinstance(string, bytes):
-		string = str(string).encode('utf8')
-	return hashlib.sha1(string).digest()
+def digest(arr: Union[str, bytes]) -> bytes:
+	"""
+	Return the SHA1 hash of a given string/byte array
+
+	Parameters
+	----------
+		arr: Union[str, bytes]
+			Byte/string array to be hashed
+
+	Returns
+	-------
+		bytes:
+			Hash of given byte/string array
+	"""
+	if not isinstance(arr, bytes):
+		arr = str(arr).encode('utf8')
+	return hashlib.sha1(arr).digest()
 
 
-def shared_prefix(args):
+def shared_prefix(args: List[str]) -> str:
 	"""
 	Find the shared prefix between the strings.
 
-	For instance:
+	Parameters
+	----------
+		*args:
+			Variable length
 
-		sharedPrefix(['blahblah', 'blahwhat'])
-
-	returns 'blah'.
+	Example
+	-------
+		assert 'blah' == shared_prefix(['blahblah', 'blahwhat'])
 	"""
 	i = 0
 	while i < min(map(len, args)):
@@ -50,10 +67,33 @@ def shared_prefix(args):
 	return args[0][:i]
 
 
-def bytes_to_bit_string(bites):
-	bits = [bin(bite)[2:].rjust(8, '0') for bite in bites]
+def bytes_to_bit_string(arr: bytes) -> str:
+	"""
+	Convert a byte array to a bit array
+
+	Parameters
+	----------
+		arr: bytes
+			Bytes to be transformed
+
+	Returns
+	-------
+		str:
+			bit array of input
+	"""
+	bits = [bin(bite)[2:].rjust(8, '0') for bite in arr]
 	return "".join(bits)
 
 
-def hex_to_base_int(hx, base=16):
-	return int(hx, base)
+def hex_to_base_int(hexval: bytes, base=16) -> int:
+	"""
+	Convert given hex to a base-16 integer
+
+	Parameters
+	----------
+		hexval: bytes
+			Hex byte array
+		base: int
+			Base of integer conversion (default=16)
+	"""
+	return int(hexval, base)

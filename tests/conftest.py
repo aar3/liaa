@@ -31,7 +31,6 @@ def bootstrap_node(event_loop):
 	finally:
 		server.stop()
 
-
 # pylint: disable=redefined-outer-name
 @pytest.fixture()
 def mknode():
@@ -58,7 +57,7 @@ def mkdgram():
 
 @pytest.fixture()
 def mkqueue():
-	def _mkqueue(msg_id=os.urandom(32), loop=loop):
+	def _mkqueue(msg_id=os.urandom(32)):
 		"""
 		Create a fake RPCMessageQueue
 		"""
@@ -109,3 +108,26 @@ class FakeServer:
 @pytest.fixture
 def fake_server(mknode):
 	return FakeServer(mknode().id)
+
+
+class Sandbox:
+	def __init__(self, obj):
+		self.obj = obj
+		self.mem = {}
+
+	def stub(self, funcname, func):
+		self.mem[funcname] = getattr(self.obj, funcname)
+		setattr(self.obj, funcname, func)
+
+	def restore(self):
+		for funcname, func in self.mem.items():
+			setattr(self.obj, funcname, func)
+
+
+@pytest.fixture
+def sandbox():
+	def _sandbox(obj=None):
+		if not obj:
+			raise RuntimeError("sandbox object cannot be None")
+		return Sandbox(obj)
+	return _sandbox
