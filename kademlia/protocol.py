@@ -8,7 +8,7 @@ from kademlia.node import Node, TNode
 from kademlia.routing import RoutingTable
 from kademlia.rpc import RPCProtocol
 from kademlia.utils import digest, hex_to_base_int
-from kademlia.storage import TForgetfulStorage
+from kademlia.storage import TForgetfulStorage, ForgetfulStorage
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -16,11 +16,20 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 RPCFindValueReturn = Union[List[Tuple[int, str, int]], Dict[str, Any]]
 
 class KademliaProtocol(RPCProtocol):
-	def __init__(self, source_node: TNode, storage: TForgetfulStorage, ksize: int):
+	def __init__(self, source_node: TNode, ksize: int):
 		RPCProtocol.__init__(self)
 		self.router = RoutingTable(self, ksize, source_node)
-		self.storage = storage
+		self._storage = None
 		self.source_node = source_node
+
+	@property
+	def storage(self) -> TForgetfulStorage:
+		return self._storage
+
+	@storage.setter
+	def storage(self, store: TForgetfulStorage) -> None:
+		assert isinstance(store, ForgetfulStorage)
+		self._storage = store
 
 	def get_refresh_ids(self):
 		"""
