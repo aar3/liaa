@@ -97,3 +97,29 @@ def hex_to_base_int(hexval: bytes, base=16) -> int:
 			Base of integer conversion (default=16)
 	"""
 	return int(hexval, base)
+
+
+def check_dht_value_type(value: Any) -> bool:
+	"""
+	Checks to see if the type of the value is a valid type for
+	placing in the dht.
+
+	Parameters
+	----------
+		value: Any
+			Value to be checked
+
+	Returns
+	-------
+		bool:
+			Indicating whether or not type is in DHT types
+	"""
+	# pylint: disable=bad-continuation
+	typeset = [
+		int,
+		float,
+		bool,
+		str,
+		bytes
+	]
+	return type(value) in typeset  # pylint: disable=unidiomatic-typecheck

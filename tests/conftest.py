@@ -61,7 +61,7 @@ def mkqueue():
 		"""
 		Create a fake RPCMessageQueue
 		"""
-		loop = asyncio.get_event_loop()
+		loop = asyncio.new_event_loop()
 		fut = loop.create_future()
 		# pylint: disable=protected-access
 		proto = RPCProtocol()

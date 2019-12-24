@@ -8,9 +8,9 @@ import logging
 from typing import List, Tuple, Union, Optional, Any
 
 from kademlia.protocol import KademliaProtocol, TKademliaProtocol
-from kademlia.utils import digest
+from kademlia.utils import digest, check_dht_value_type
 from kademlia.storage import ForgetfulStorage
-from kademlia.node import Node, TNode, Resource
+from kademlia.node import Node, Resource
 from kademlia.crawling import ValueSpiderCrawl, NodeSpiderCrawl
 
 
@@ -153,7 +153,7 @@ class Server:
 		for dkey, value in self.storage.iter_older_than(3600):
 			await self.set_digest(dkey, value)
 
-	def bootstrappable_neighbors(self) -> List[TNode]:
+	def bootstrappable_neighbors(self) -> List["Node"]:
 		"""
 		Get a list of (ip, port) tuple pairs suitable for use as an argument to
 		the bootstrap method.
@@ -169,10 +169,10 @@ class Server:
 
 		Returns
 		-------
-			List[TNode]:
+			List["Node"]:
 				List of peers suitable for bootstrap use
 		"""
-		neighbors: List[TNode] = self.protocol.router.find_neighbors(self.node)
+		neighbors: List["Node"] = self.protocol.router.find_neighbors(self.node)
 		return [tuple(n)[-2:] for n in neighbors]
 
 	async def bootstrap(self, addrs) -> asyncio.Future:
@@ -198,7 +198,7 @@ class Server:
 		spider = NodeSpiderCrawl(self.protocol, self.node, nodes, self.ksize, self.alpha)
 		return await spider.find()
 
-	async def bootstrap_node(self, addr: Tuple[str, int]) -> Optional[TNode]:
+	async def bootstrap_node(self, addr: Tuple[str, int]) -> Optional["Node"]:
 		"""
 		Ping a given address so that both `addr` and `self.node` can know
 		about one another
@@ -383,27 +383,4 @@ class Server:
 												frequency)
 
 
-def check_dht_value_type(value: Any) -> bool:
-	"""
-	Checks to see if the type of the value is a valid type for
-	placing in the dht.
 
-	Parameters
-	----------
-		value: Any
-			Value to be checked
-
-	Returns
-	-------
-		bool:
-			Indicating whether or not type is in DHT types
-	"""
-	# pylint: disable=bad-continuation
-	typeset = [
-		int,
-		float,
-		bool,
-		str,
-		bytes
-	]
-	return type(value) in typeset  # pylint: disable=unidiomatic-typecheck
