@@ -1,23 +1,11 @@
 import os
 import asyncio
 
-from kademlia.network import Server, check_dht_value_type
+from kademlia.network import Server
 from kademlia.protocol import KademliaProtocol
 
 
 PORT = 8765
-
-# @pytest.mark.asyncio
-# async def test_storing(bootstrap_node):
-# 	server = Server()
-# 	await server.listen(bootstrap_node[1] + 1)
-# 	await server.bootstrap([bootstrap_node])
-# 	await server.set('key', 'value')
-# 	result = await server.get('key')
-
-# 	assert result == 'value'
-
-# 	server.stop()
 
 
 class TestServer:
@@ -88,36 +76,3 @@ class TestServer:
 		server.protocol = server._create_protocol()
 		result = asyncio.run(server.set_digest(dkey, "foo"))
 		assert not result
-
-
-class TestServerUtils:
-# pylint: disable=no-self-use
-	def test_check_dht_value_type_returns_true_when_arg_is_valid(self):
-		# pylint: disable=invalid-name
-		a = check_dht_value_type("foo")
-		assert a
-
-		b = check_dht_value_type(8)
-		assert b
-
-		c = check_dht_value_type(b'123')
-		assert c
-
-		d = check_dht_value_type(True)
-		assert d
-
-		e = check_dht_value_type(3.14)
-		assert e
-
-		f = check_dht_value_type({})
-		assert not f
-
-		g = check_dht_value_type([])
-		assert not g
-
-		# pylint: disable=too-few-public-methods
-		class Foo:
-			pass
-
-		h = check_dht_value_type(Foo())
-		assert not h

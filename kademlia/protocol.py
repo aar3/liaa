@@ -4,20 +4,23 @@ import random
 # pylint: disable=unused-wildcard-import,wildcard-import
 from typing import *
 
-from kademlia.node import Node, TNode
+from kademlia.node import Node
 from kademlia.routing import RoutingTable
 from kademlia.rpc import RPCProtocol
 from kademlia.utils import digest, hex_to_base_int
-from kademlia.storage import TForgetfulStorage, ForgetfulStorage
+from kademlia.storage import ForgetfulStorage
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-RPCFindValueReturn = Union[List[Tuple[int, str, int]], Dict[str, Any]]
-
 class KademliaProtocol(RPCProtocol):
-	def __init__(self, source_node: TNode, ksize: int):
+	def __init__(self, source_node: "Node", ksize: int):
 		"""
+		KadmeliaProtocol
+
+		Abstraction used as a layer between our router and storage, and our
+		public server. Protocol is responsible for executing various rpc's 
+		in order to update routing table, storage and keep network active
 
 		Parameters
 		----------
@@ -32,11 +35,11 @@ class KademliaProtocol(RPCProtocol):
 		self.source_node = source_node
 
 	@property
-	def storage(self) -> TForgetfulStorage:
+	def storage(self) -> "ForgetfulStorage":
 		return self._storage
 
 	@storage.setter
-	def storage(self, store: TForgetfulStorage) -> None:
+	def storage(self, store: "ForgetfulStorage") -> None:
 		assert isinstance(store, ForgetfulStorage)
 		self._storage = store
 
@@ -60,7 +63,7 @@ class KademliaProtocol(RPCProtocol):
 			ids.append(rid)
 		return ids
 
-	def rpc_stun(self, sender: TNode) -> TNode:  # pylint: disable=no-self-use
+	def rpc_stun(self, sender: "Node") -> "Node":  # pylint: disable=no-self-use
 		"""
 		Execute a S.T.U.N procedure on a given sender
 
@@ -97,7 +100,7 @@ class KademliaProtocol(RPCProtocol):
 		self.welcome_if_new(source)
 		return self.source_node.id
 
-	def rpc_store(self, sender: TNode, node_id: int, key: int, value: Any) -> bool:
+	def rpc_store(self, sender: "Node", node_id: int, key: int, value: Any) -> bool:
 		"""
 		Store data from a given sender
 
@@ -123,7 +126,7 @@ class KademliaProtocol(RPCProtocol):
 		self.storage[key] = value
 		return True
 
-	def rpc_find_node(self, sender: TNode, node_id: int, key: int) -> List[Tuple[int, str, int]]:
+	def rpc_find_node(self, sender: "Node", node_id: int, key: int) -> List[Tuple[int, str, int]]:
 		"""
 		Return a list of peers that are closest to a given key (node_id to be found)
 
@@ -149,7 +152,7 @@ class KademliaProtocol(RPCProtocol):
 		return list(map(tuple, neighbors))
 
 	# pylint: disable=line-too-long
-	def rpc_find_value(self, sender: TNode, node_id: int, key: int) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
+	def rpc_find_value(self, sender: "Node", node_id: int, key: int) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
 		"""
 		Return the value at a given key. If the key is found, return it
 		to the requestor, else execute an rpc_find_node to find neighbors
@@ -178,7 +181,7 @@ class KademliaProtocol(RPCProtocol):
 			return self.rpc_find_node(sender, node_id, key)
 		return {"value": value}
 
-	async def call_find_node(self, node_to_ask: TNode, node_to_find: TNode) -> List[Tuple[int, str, int]]:
+	async def call_find_node(self, node_to_ask: "Node", node_to_find: "Node") -> List[Tuple[int, str, int]]:
 		"""
 		Dial a given node_to_ask in order to find node_to_find
 
@@ -198,7 +201,7 @@ class KademliaProtocol(RPCProtocol):
 		result = await self.find_node(address, self.source_node.id, node_to_find.id)
 		return self.handle_call_response(result, node_to_ask)
 
-	async def call_find_value(self, node_to_ask: TNode, node_to_find: TNode) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
+	async def call_find_value(self, node_to_ask: "Node", node_to_find: "Node") -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
 		"""
 		Dial a given node_to_ask in order to find a value on node_to_find
 
@@ -292,7 +295,7 @@ class KademliaProtocol(RPCProtocol):
 				asyncio.ensure_future(self.call_store(node, key, value))
 		self.router.add_contact(node)
 
-	def handle_call_response(self, result: Any, node: TNode):
+	def handle_call_response(self, result: Any, node: "Node"):
 		"""
 		If we get a valid response, welcome the node (if need be). If
 		we get no response, remove the node as peer is down

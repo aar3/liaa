@@ -94,5 +94,3 @@ class ForgetfulStorage(IStorage):
 		ikeys = self.data.keys()
 		ivalues = map(operator.itemgetter(1), self.data.values())
 		return zip(ikeys, ivalues)
-
-TForgetfulStorage = NewType("TForgetfulStorage", ForgetfulStorage)

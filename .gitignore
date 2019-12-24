@@ -1,16 +1,31 @@
-*.pickle
-*.pid
-_trial_temp
+# docs
+docs/_build
 apidoc
-*.pyc
+
+# build
+kademlia.egg-info
 build
 dist
-kademlia.egg-info
-docs/_build
-.coverage
-venv/
-.requirements.lock
-.envrc
-.vscode/
+*.pyc
+
+# general
 __pycache__
+
+# env
+.vscode/
+.envrc
+venv/
+
+# requirements
+.requirements.lock
+
+# testing
+.coverage
 .pytest_cache/
+
+# misc
+_trial_temp
+
+# runtime cache
+*.pickle
+*.pid

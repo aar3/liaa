@@ -8,7 +8,7 @@ from typing import *
 
 import umsgpack
 
-from kademlia.node import Node, TNode
+from kademlia.node import Node
 from kademlia.exception import MalformedMessage
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -114,7 +114,7 @@ class RPCFindResponse:
 		"""
 		return self.response[1]['value']
 
-	def get_node_list(self) -> List[TNode]:
+	def get_node_list(self) -> List["Node"]:
 		"""
 		Get the node list in the response.  If there's no value, this should
 		be set.
@@ -125,7 +125,7 @@ class RPCFindResponse:
 
 		Returns
 		-------
-			List[TNode]:
+			List["Node"]:
 				List of nodes returned from find response
 		"""
 		nodelist = self.response[1] or []

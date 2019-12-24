@@ -3,7 +3,7 @@ from collections import Counter
 # pylint: disable=unused-wildcard-import,wildcard-import
 from typing import *
 
-from kademlia.node import NodeHeap, TNode
+from kademlia.node import NodeHeap
 from kademlia.rpc import RPCFindResponse
 from kademlia.protocol import TKademliaProtocol
 from kademlia.utils import gather_dict
@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 # pylint: disable=too-few-public-methods
 class SpiderCrawl:
 	# pylint: disable=line-too-long
-	def __init__(self, protocol: TKademliaProtocol, node: TNode, peers: List[TNode], ksize: int, alpha: int):
+	def __init__(self, protocol: TKademliaProtocol, node: "Node", peers: List["Node"], ksize: int, alpha: int):
 		"""
 		The C{SpiderCrawl}er is a base class that is responsible for bootstrapping
 		various sub-classes (sub-crawlers) with a list of necessary functions,
@@ -93,7 +93,7 @@ class SpiderCrawl:
 
 class ValueSpiderCrawl(SpiderCrawl):
 	# pylint: disable=line-too-long
-	def __init__(self, protocol: TKademliaProtocol, node: TNode, peers: List[TNode], ksize: int, alpha: int):
+	def __init__(self, protocol: TKademliaProtocol, node: "Node", peers: List["Node"], ksize: int, alpha: int):
 		"""
 		The C{ValueCrawl}er is basically responsible for executing recursive calls
 		to our _find method, which searches our nearest nodes (and the nearest nodes

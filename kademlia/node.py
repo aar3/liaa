@@ -1,21 +1,15 @@
 from operator import itemgetter
 import heapq
-# pylint: disable=unused-wildcard-import,wildcard-import
-from typing import *
+from typing import Union, Optional, List
 
 from kademlia.utils import hex_to_base_int, digest
 
 
 class Node:
-
-	def __init__(self, 
-		node_id: int,
-		 ip: Optional[str] = None, 
-		 port: Optional[int] = None
-	):
+	def __init__(self, node_id: int, ip: Optional[str] = None, port: Optional[int] = None):
 		"""
 		Node
-		
+
 		Simple object to encapsulate the concept of a Node (minimally an ID, but
 		also possibly an IP and port if this represents a node on the network).
 		This class should generally not be instantiated directly, as it is a low
@@ -35,16 +29,21 @@ class Node:
 		self.port = port
 		self.long_id = hex_to_base_int(node_id.hex())
 
-	def is_same_node(self, node):
+	def is_same_node(self, node: "Node") -> bool:
 		return self.ip == node.ip and self.port == node.port
 
-	def distance_to(self, node):
+	def distance_to(self, node: "Node") -> int:
 		"""
 		Get the distance between this node and another.
+
+		Parameters
+		----------
+			node: Node
+				Node against which to measure key distance
 		"""
 		return self.long_id ^ node.long_id
 
-	def __eq__(self, other):
+	def __eq__(self, other: "Node"):
 		return self.ip == other.ip and self.port == other.port
 
 	def __iter__(self):
@@ -75,31 +74,41 @@ class Resource:
 		self.long_id = hex_to_base_int(digest(self.key))
 
 
-TNode = NewType("TNode", Node)
-
 class NodeHeap:
-	"""
-	A heap of nodes ordered by distance to a given node.
-	"""
 	def __init__(self, node, maxsize):
 		"""
-		Constructor.
+		NodeHead
 
-		@param node: The node to measure all distnaces from.
-		@param maxsize: The maximum size that this heap can grow to.
+		A heap of nodes ordered by distance to a given node.
+
+		Parameters
+		----------
+			node: Node
+				The node to measure all distnaces from.
+			maxsize: int
+				The maximum size that this heap can grow to.
 		"""
 		self.node = node
 		self.heap = []
 		self.contacted = set()
 		self.maxsize = maxsize
 
-	def remove(self, peers):
+	def remove(self, peers: List["Node"]) -> None:
 		"""
 		Remove a list of peer ids from this heap.  Note that while this
 		heap retains a constant visible size (based on the iterator), it's
 		actual size may be quite a bit larger than what's exposed.  Therefore,
 		removal of nodes may not change the visible size as previously added
 		nodes suddenly become visible.
+
+		Parameters
+		----------
+			peers: List[Node]
+				List of peers which to prune
+
+		Returns
+		-------
+			None
 		"""
 		peers = set(peers)
 		if not peers:
