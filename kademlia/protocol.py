@@ -17,6 +17,15 @@ RPCFindValueReturn = Union[List[Tuple[int, str, int]], Dict[str, Any]]
 
 class KademliaProtocol(RPCProtocol):
 	def __init__(self, source_node: TNode, ksize: int):
+		"""
+
+		Parameters
+		----------
+			source_node: Node
+				Our node (representing the current machine)
+			ksize: int
+				Size of kbuckets
+		"""
 		RPCProtocol.__init__(self)
 		self.router = RoutingTable(self, ksize, source_node)
 		self._storage = None
@@ -52,11 +61,25 @@ class KademliaProtocol(RPCProtocol):
 		return ids
 
 	def rpc_stun(self, sender: TNode) -> TNode:  # pylint: disable=no-self-use
+		"""
+		Execute a S.T.U.N procedure on a given sender
+
+		Parameters
+		----------
+			sender: Node
+				Requesting node
+
+		Returns
+		-------
+			sender: Node
+				Requesting node
+		"""
 		return sender
 
 	def rpc_ping(self, sender: Tuple[str, int], node_id: int) -> int:
 		"""
-		Ping a given node
+		Accept an incoming request from sender and return sender's ID
+		to indicate a successful ping
 
 		Parameters
 		----------
@@ -68,7 +91,7 @@ class KademliaProtocol(RPCProtocol):
 		Returns
 		-------
 			int:
-				ID of sending node
+				ID of requesting node
 		"""
 		source = Node(node_id, sender[0], sender[1])
 		self.welcome_if_new(source)
@@ -102,7 +125,7 @@ class KademliaProtocol(RPCProtocol):
 
 	def rpc_find_node(self, sender: TNode, node_id: int, key: int) -> List[Tuple[int, str, int]]:
 		"""
-		Find the node storing a given key
+		Return a list of peers that are closest to a given key (node_id to be found)
 
 		Parameters
 		----------
@@ -111,7 +134,7 @@ class KademliaProtocol(RPCProtocol):
 			node_id: int
 				ID of the node initiating the request
 			key: int
-				ID of resource to be located
+				ID node who's closes neighbors we want to return
 
 		Returns
 		-------
@@ -128,7 +151,9 @@ class KademliaProtocol(RPCProtocol):
 	# pylint: disable=line-too-long
 	def rpc_find_value(self, sender: TNode, node_id: int, key: int) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
 		"""
-		Return the value at a given key, via a given sender
+		Return the value at a given key. If the key is found, return it
+		to the requestor, else execute an rpc_find_node to find neighbors
+		of sender that might have key
 
 		Parameters
 		----------
@@ -194,12 +219,42 @@ class KademliaProtocol(RPCProtocol):
 		result = await self.find_value(address, self.source_node.id, node_to_find.id)
 		return self.handle_call_response(result, node_to_ask)
 
-	async def call_ping(self, node_to_ask):
+	async def call_ping(self, node_to_ask) -> int:
+		"""
+		Wrapper for rpc_ping, where we just handle the result
+
+		Parameters
+		----------
+			node_to_ask: Node
+				Node at which to send ping request
+
+		Returns
+		-------
+			int:
+				ID of peer responding to ping
+		"""
 		address = (node_to_ask.ip, node_to_ask.port)
 		result = await self.ping(address, self.source_node.id)
 		return self.handle_call_response(result, node_to_ask)
 
-	async def call_store(self, node_to_ask, key, value):
+	async def call_store(self, node_to_ask, key, value) -> bool:
+		"""
+		Wrapper for rpc_store, where we handle the result
+
+		Parameters
+		----------
+			node_to_ask: Node
+				Node which to ask to store a given key/value pair
+			key: int
+				ID of resource to store
+			value: Any
+				Payload to store at key address
+
+		Returns
+		-------
+			bool:
+				Indication that store operation was succesful
+		"""
 		address = (node_to_ask.ip, node_to_ask.port)
 		result = await self.store(address, self.source_node.id, key, value)
 		return self.handle_call_response(result, node_to_ask)
@@ -209,19 +264,22 @@ class KademliaProtocol(RPCProtocol):
 		Given a new node, send it all the keys/values it should be storing,
 		then add it to the routing table.
 
-		@param node: A new node that just joined (or that we just found out
-		about).
-
 		Process:
-		For each key in storage, get k closest nodes.  If newnode is closer
-		than the furtherst in that list, and the node for this server
-		is closer than the closest in that list, then store the key/value
-		on the new node (per section 2.5 of the paper)
+			For each key in storage, get k closest nodes.  If newnode is closer
+			than the furtherst in that list, and the node for this server
+			is closer than the closest in that list, then store the key/value
+			on the new node (per section 2.5 of the paper)
+
+		Parameters
+		----------
+			node: Node
+				Node to add to routing table
 		"""
 		if not self.router.is_new_node(node):
 			return
 
 		log.info("never seen %s before, adding to router", node)
+
 		for key, value in self.storage:
 			keynode = Node(digest(key))
 			neighbors = self.router.find_neighbors(keynode)
@@ -236,8 +294,20 @@ class KademliaProtocol(RPCProtocol):
 
 	def handle_call_response(self, result: Any, node: TNode):
 		"""
-		If we get a response, add the node to the routing table.  If
-		we get no response, make sure it's removed from the routing table.
+		If we get a valid response, welcome the node (if need be). If
+		we get no response, remove the node as peer is down
+
+		Parameters
+		----------
+			result: Any
+				Could be the result of any rpc method
+			node: Node
+				Node to which operation was sent
+
+		Returns
+		-------
+			result: Any
+				The result from our rpc method
 		"""
 		if not result[0]:
 			log.warning("no response from %s, removing from router", node)
