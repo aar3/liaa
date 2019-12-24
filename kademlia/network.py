@@ -5,36 +5,39 @@ import random
 import pickle
 import asyncio
 import logging
+from typing import List, Tuple, Union, Optional, Any
 
 from kademlia.protocol import KademliaProtocol, TKademliaProtocol
 from kademlia.utils import digest
 from kademlia.storage import ForgetfulStorage
 from kademlia.node import Node, TNode, Resource
 from kademlia.crawling import ValueSpiderCrawl, NodeSpiderCrawl
-from typing import List, Tuple, Union, Optional
+
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 # pylint: disable=too-many-instance-attributes
 class Server:
-	"""
-	High level view of a node instance.  This is the object that should be
-	created to start listening as an active node on the network.
-	"""
 
 	protocol_class = KademliaProtocol
 
 	def __init__(self, ksize=20, alpha=3, node_id=None, storage=None):
 		"""
+		High level view of a node instance.  This is the object that should be
+		created to start listening as an active node on the network.
 		Create a server instance.  This will start listening on the given port.
 
-		Args:
-			ksize (int): The k parameter from the paper
-			alpha (int): The alpha parameter from the paper
-			node_id: The id for this node on the network.
-			storage: An instance that implements
-					 :interface:`~kademlia.storage.IStorage`
+		Parameters
+		----------
+			ksize: int
+				The k parameter from the paper
+			alpha: int
+				The alpha parameter from the paper
+			node_id: int
+				The id for this node on the network.
+			storage: ForgetfulStorage
+				A storage interface
 		"""
 		self.ksize = ksize
 		self.alpha = alpha
@@ -107,12 +110,12 @@ class Server:
 
 	def refresh_table(self, delay=3600) -> None:
 		"""
-		Refresh our routing table via a 
+		Refresh our routing table via a
 
 		Parameters
 		----------
 			delay: int
-				Time to wait (secs) before executing future 
+				Time to wait (secs) before executing future
 
 		Returns
 		-------
@@ -152,7 +155,7 @@ class Server:
 
 	def bootstrappable_neighbors(self) -> List[TNode]:
 		"""
-		Get a list of (ip, port) tuple pairs suitable for use as an argument to 
+		Get a list of (ip, port) tuple pairs suitable for use as an argument to
 		the bootstrap method.
 
 		The server should have been bootstrapped
@@ -179,7 +182,7 @@ class Server:
 		Parameters
 		----------
 			addrs: List[Tuple[str, int]]
-				Note that only IP addresses are acceptable - hostnames will 
+				Note that only IP addresses are acceptable - hostnames will
 				cause an error.
 
 		Returns
@@ -204,7 +207,7 @@ class Server:
 		----------
 			addr: Tuple[str, int]
 				Address of peer to ping
-		
+
 		Returns
 		-------
 			Optiona[Node]:
@@ -216,7 +219,8 @@ class Server:
 
 	async def get(self, key: Union[str, bytes]) -> asyncio.Future:
 		"""
-		Crawl the network in order to find a given key
+		Crawl the current node's known network in order to find a given key. This
+		is the interface for grabbing a key from the network
 
 		Parameters
 		----------
@@ -244,7 +248,20 @@ class Server:
 
 	async def set(self, key: Union[bytes, str], value: Any) -> asyncio.Future:
 		"""
-		Set the given string key to the given value in the network.
+		Set the given string key to the given value in the network. This is the
+		interface for setting a key throughout the network
+
+		Parameters
+		----------
+			key: Union[bytes, str]
+				ID of the resource to be stored
+			value: Any
+				Payload of the resource to be stored
+
+		Returns
+		-------
+			asyncio.Future:
+				Callback to set_digest which finds nodes on which to store key
 		"""
 		if not check_dht_value_type(value):
 			raise TypeError("Value must be of type int, float, bool, str, or bytes")
@@ -252,10 +269,23 @@ class Server:
 		dkey = digest(key)
 		return await self.set_digest(dkey, value)
 
-	async def set_digest(self, dkey, value):
+	async def set_digest(self, dkey: bytes, value: Any) -> bool:
 		"""
 		Set the given SHA1 digest key (bytes) to the given value in the
 		network.
+
+		Parameters
+		----------
+			dkey: bytes
+				ID of reosurce to be stored
+			value: Any
+				Payload of resource to be stored
+
+		Returns
+		-------
+			bool:
+				Indicator of whether or not the key/value pair was stored
+				on any of the nearest nodes found by the SpiderCrawler
 		"""
 		node = Node(dkey)
 
@@ -276,10 +306,19 @@ class Server:
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
 
-	def save_state(self, fname):
+	def save_state(self, fname: str) -> None:
 		"""
 		Save the state of this node (the alpha/ksize/id/immediate neighbors)
 		to a cache file with the given fname.
+
+		Parameters
+		----------
+			fname: str
+				File location where in which to write state
+
+		Returns
+		-------
+			None
 		"""
 		log.info("Saving state to %s", fname)
 		# pylint: disable=bad-continuation
@@ -296,10 +335,20 @@ class Server:
 			pickle.dump(data, file)
 
 	@classmethod
-	def load_state(cls, fname):
+	def load_state(cls, fname: str) -> "Server":
 		"""
 		Load the state of this node (the alpha/ksize/id/immediate neighbors)
 		from a cache file with the given fname.
+
+		Parameters
+		----------
+			fname: str
+				File location where in which to write state
+
+		Returns
+		-------
+			Server:
+				Parameterized instance of a Server
 		"""
 		log.info("Loading state from %s", fname)
 		with open(fname, 'rb') as file:
@@ -309,29 +358,45 @@ class Server:
 			svr.bootstrap(data['neighbors'])
 		return svr
 
-	def save_state_regularly(self, fname, frequency=600):
+	def save_state_regularly(self, fname: str, frequency: int = 600) -> None:
 		"""
 		Save the state of node with a given regularity to the given
 		filename.
 
-		Args:
-			fname: File name to save retularly to
-			frequency: Frequency in seconds that the state should be saved.
-						By default, 10 minutes.
+		Parameters
+		----------
+			fname: str
+				File name to save retularly to
+			frequency: int
+				Frequency in seconds that the state should be saved. (default=10 mins)
+
+		Returns
+		-------
+			None
 		"""
 		self.save_state(fname)
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
 		self.save_state_loop = loop.call_later(frequency,
-											   self.save_state_regularly,
-											   fname,
-											   frequency)
+												self.save_state_regularly,
+												fname,
+												frequency)
 
 
-def check_dht_value_type(value):
+def check_dht_value_type(value: Any) -> bool:
 	"""
 	Checks to see if the type of the value is a valid type for
 	placing in the dht.
+
+	Parameters
+	----------
+		value: Any
+			Value to be checked
+
+	Returns
+	-------
+		bool:
+			Indicating whether or not type is in DHT types
 	"""
 	# pylint: disable=bad-continuation
 	typeset = [
