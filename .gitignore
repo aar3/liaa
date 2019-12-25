@@ -15,9 +15,7 @@ __pycache__
 .vscode/
 .envrc
 venv/
-
-# requirements
-.requirements.lock
+virtualenv/
 
 # testing
 .coverage

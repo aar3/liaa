@@ -13,3 +13,4 @@
 - [refactor] change some naming for more clarity/explicitness
 - [chore] add docstrings, typings, and tests to all modules
 - [enhancement] add Docker support
+- [enhancement] continue support for CI (Docker, travis)
