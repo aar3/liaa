@@ -1,10 +1,10 @@
-import os
 import asyncio
 
 from kademlia.network import Server
 from kademlia.protocol import KademliaProtocol
-from kademlia.node import Resource
-from kademlia.utils import rand_id
+# from kademlia.node import Resource
+from kademlia.node import Node, NodeType
+from kademlia.utils import rand_str, rand_int_id, int_to_digest
 
 
 PORT = 8765
@@ -73,8 +73,9 @@ class TestServer:
 
 	def test_set_digest_returns_void_when_node_has_no_neighbors(self):
 		server = Server()
+		num = rand_int_id()
+		resource = Node(int_to_digest(num), type=NodeType.Resource, value=rand_str())
 		# pylint: disable=protected-access
-		rsrc = Resource(key=rand_id(), value=rand_id())
 		server.protocol = server._create_protocol()
-		result = asyncio.run(server.set_digest(rsrc))
+		result = asyncio.run(server.set_digest(resource))
 		assert not result

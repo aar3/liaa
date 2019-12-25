@@ -2,8 +2,26 @@ import sys
 import hashlib
 import operator
 import random
+import string
 import asyncio
 from typing import Dict, Any, List, Union, Tuple, Optional
+
+
+def join_addr(addr: Tuple[str, int]) -> str:
+	"""
+	Join a tuple address to string
+
+	Parameters
+	----------
+		addr: Tuple[str, int]
+			Address to be joined
+
+	Returns
+	-------
+		str:
+			String of address
+	"""
+	return ":".join(map(str, addr))
 
 
 def split_addr(addr: "str") -> Tuple[str, int]:
@@ -24,16 +42,28 @@ def split_addr(addr: "str") -> Tuple[str, int]:
 	return host, int(port)
 
 
-def rand_id() -> str:
+def rand_str(num=20) -> str:
+	"""
+	Create a random string array
+	"""
+	chars = string.ascii_letters + string.digits
+	return "".join(random.sample(chars, num))
+
+
+def rand_int_id() -> str:
 	"""
 	Create a random string array
 
 	Returns
 	-------
-		str:
-			Random 255-bit string array
+		int:
+			160-bit integer
 	"""
-	return str(random.getrandbits(255))
+	return random.randint(1, 2**160)
+
+def rand_digest_id():
+	num = rand_int_id()
+	return int_to_digest(num)
 
 
 async def gather_dict(dic: Dict[str, Any]) -> Dict[str, Any]:
@@ -75,6 +105,14 @@ def digest(arr: Union[str, bytes]) -> bytes:
 	return hashlib.sha1(arr).digest()
 
 
+def digest_to_int(byte_arr: bytes) -> int:
+	return hex_to_int(byte_arr.hex())
+
+
+def int_to_digest(num: int) -> bytes:
+	return num.to_bytes((num.bit_length() // 8) + 1, byteorder='big')
+
+
 def shared_prefix(args: List[str]) -> str:
 	"""
 	Find the shared prefix between the strings.
@@ -114,7 +152,7 @@ def bytes_to_bit_string(arr: bytes) -> str:
 	return "".join(bits)
 
 
-def hex_to_base_int(hexval: bytes, base=16) -> int:
+def hex_to_int(hexval: bytes, base=16) -> int:
 	"""
 	Convert given hex to a base-16 integer
 

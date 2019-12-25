@@ -3,7 +3,7 @@ import hashlib
 from collections.abc import Iterable
 
 from kademlia.node import Node, NodeHeap
-from kademlia.utils import hex_to_base_int
+from kademlia.utils import hex_to_int
 
 
 class TestNode:
@@ -11,13 +11,13 @@ class TestNode:
 	def test_node_long_id_derivation_is_ok(self):
 		rid = hashlib.sha1(str(random.getrandbits(255)).encode()).digest()
 		node = Node(rid)
-		assert node.long_id == hex_to_base_int(rid.hex())
+		assert node.long_id == hex_to_int(rid.hex())
 
 	def test_valid_diff_calculation_is_ok(self):
 		ridone = hashlib.sha1(str(random.getrandbits(255)).encode())
 		ridtwo = hashlib.sha1(str(random.getrandbits(255)).encode())
 
-		shouldbe = hex_to_base_int(ridone.digest().hex()) ^ hex_to_base_int(ridtwo.digest().hex())
+		shouldbe = hex_to_int(ridone.digest().hex()) ^ hex_to_int(ridtwo.digest().hex())
 		none = Node(ridone.digest())
 		ntwo = Node(ridtwo.digest())
 		assert none.distance_to(ntwo) == shouldbe
@@ -34,7 +34,7 @@ class TestNode:
 
 	def test_node_iter(self, mknode):
 		node = mknode()
-		assert tuple(node) == (node.id, node.ip, node.port)
+		assert tuple(node) == (node.digest_id, node.ip, node.port)
 
 
 class TestNodeHeap:
@@ -49,7 +49,7 @@ class TestNodeHeap:
 		# pylint: disable=invalid-name
 		for n in nodes:
 			heap.push(n)
-		node = heap.get_node(nodes[0].id)
+		node = heap.get_node(nodes[0].digest_id)
 		assert isinstance(node, Node)
 
 	def test_get_node_returns_none_when_node_not_exists(self, mknode):
@@ -91,6 +91,7 @@ class TestNodeHeap:
 		heap.remove(nodes)
 		popped = heap.popleft()
 		assert isinstance(popped, Iterable)
+		# pylint: disable=invalid-name
 		_, ip, port = tuple(popped)
 		assert (not ip) and (not port)
 
@@ -123,7 +124,7 @@ class TestNodeHeap:
 		for node in nodes:
 			heap.push(node)
 
-		heap.remove([nodes[0].id, nodes[1].id])
+		heap.remove([nodes[0].digest_id, nodes[1].digest_id])
 		# len(heap) == min(10-2, maxsize)
 		assert len(list(heap)) == maxsize
 

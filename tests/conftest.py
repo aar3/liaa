@@ -34,16 +34,16 @@ def bootstrap_node(event_loop):
 # pylint: disable=redefined-outer-name
 @pytest.fixture()
 def mknode():
-	def _mknode(node_id=None, ip_addy=None, port=None, intid=None):
+	def _mknode(digest_id=None, ip_addy=None, port=None, intid=None):
 		"""
 		Make a node.  Created a random id if not specified.
 		"""
 		if intid is not None:
-			node_id = struct.pack('>l', intid)
-		if not node_id:
+			digest_id = struct.pack('>l', intid)
+		if not digest_id:
 			randbits = str(random.getrandbits(255))
-			node_id = hashlib.sha1(randbits.encode()).digest()
-		return Node(node_id, ip_addy, port)
+			digest_id = hashlib.sha1(randbits.encode()).digest()
+		return Node(digest_id, ip_addy, port)
 	return _mknode
 
 
@@ -92,7 +92,7 @@ class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
 def fake_proto(mknode):
 	def _fake_proto(node=None):
 		node = node or mknode()
-		return FakeProtocol(node.id)
+		return FakeProtocol(node.digest_id)
 	return _fake_proto
 
 
@@ -106,7 +106,7 @@ class FakeServer:
 
 @pytest.fixture
 def fake_server(mknode):
-	return FakeServer(mknode().id)
+	return FakeServer(mknode().digest_id)
 
 
 class Sandbox:

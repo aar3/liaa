@@ -3,13 +3,13 @@ import base64
 import hashlib
 import logging
 import os
-# pylint: disable=unused-wildcard-import,wildcard-import
-from typing import *
+from typing import Any, List, Dict, Tuple, Union
 
 import umsgpack
 
 from kademlia.node import Node
 from kademlia.exception import MalformedMessage
+from kademlia.utils import join_addr
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -48,9 +48,6 @@ class RPCMessageQueue:
 
 	def __len__(self):
 		return len(self.items)
-
-
-TRPCMessageQueue = NewType("TRPCMessageQueue", RPCMessageQueue)
 
 
 class RPCFindResponse:
@@ -156,9 +153,6 @@ class Datagram:
 		return not isinstance(self.data, list) or len(self.data) != 2
 
 
-TDatagram = NewType("TDatagram", Datagram)
-
-
 class RPCProtocol(asyncio.DatagramProtocol):
 	def __init__(self, wait: int = 5):
 		"""
@@ -174,7 +168,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		"""
 		self._wait = wait
 		self._outstanding_msgs: Dict[int, Tuple[asyncio.Future, asyncio.Handle]] = {}
-		self._queue: TRPCMessageQueue = RPCMessageQueue()
+		self._queue = RPCMessageQueue()
 		self.transport = None
 
 	def connection_made(self, transport: asyncio.Handle) -> None:
@@ -204,7 +198,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 
 
 		"""
-		log.debug("received dgram from %s", addr)
+		log.debug("incoming dgram from peer at %s", join_addr(addr))
 		asyncio.ensure_future(self._solve_dgram(data, addr))
 
 	async def _solve_dgram(self, buff: bytes, address: Tuple[str, int]) -> None:
@@ -233,7 +227,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		else:
 			log.debug("Received unknown message from %s, ignoring", address)
 
-	def _accept_response(self, dgram: TDatagram, address: Tuple[str, int]) -> None:
+	def _accept_response(self, dgram: "Datagram", address: Tuple[str, int]) -> None:
 		"""
 		Processor for incoming responses
 
@@ -251,11 +245,11 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			log.warning("received unknown message %s from %s; ignoring", *msgargs)
 			return
 
-		log.debug("received response %s for message id %s from %s", dgram.data, *msgargs)
+		log.debug("received response %s for message id %s from %s", dgram.data, dgram.id, join_addr(msgargs))
 		if not self._queue.dequeue_fut(dgram):
 			log.warning("could not mark datagram %s as received", dgram.id)
 
-	async def _accept_request(self, dgram: TDatagram, address: Tuple[str, int]) -> None:
+	async def _accept_request(self, dgram: "Datagram", address: Tuple[str, int]) -> None:
 		"""
 		Process an incoming request datagram as well as its RPC response
 
@@ -292,7 +286,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		response = await func(address, *dgram.args)
 		# pylint: disable=bad-continuation
 		log.debug("sending response %s for msg id %s to %s", response,
-			base64.b64encode(dgram.id), address)
+			base64.b64encode(dgram.id), join_addr(address))
 		txdata = Header.Response + dgram.id + umsgpack.packb(response)
 		self.transport.sendto(txdata, address)
 
@@ -312,7 +306,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		self._outstanding_msgs[msg_id][0].set_result((False, None))
 		del self._outstanding_msgs[msg_id]
 
-	def __getattr__(self, name: str) -> Union[asyncio.Future, Callable[[Any], None]]:
+	def __getattr__(self, name: str) -> Union[asyncio.Future, asyncio.Future, None]:
 
 		if name.startswith("_") or name.startswith("rpc_"):
 			return getattr(super(), name)
@@ -333,7 +327,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			if len(data) > MAX_PAYLOAD_SIZE:
 				raise MalformedMessage("Total length of function name and arguments cannot exceed 8K")
 			txdata = Header.Request + msg_id + data
-			log.debug("calling remote function %s on %s (msgid %s)", name, address, base64.b64encode(msg_id))
+			log.debug("executing rpc %s on %s (msgid %s)", name, join_addr(address), base64.b64encode(msg_id))
 			self.transport.sendto(txdata, address)
 
 			# we assume python version >= 3.7
