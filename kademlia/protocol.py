@@ -8,49 +8,43 @@ from kademlia.node import Node
 from kademlia.routing import RoutingTable
 from kademlia.rpc import RPCProtocol
 from kademlia.utils import digest, hex_to_base_int
-from kademlia.storage import ForgetfulStorage
+
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 class KademliaProtocol(RPCProtocol):
-	def __init__(self, source_node: "Node", ksize: int):
+	# pylint: disable=no-self-use,bad-continuation
+	def __init__(self,
+		source_node: "Node",
+		storage: "ForgetfulStorage",
+		ksize: int
+	):
 		"""
 		KadmeliaProtocol
 
 		Abstraction used as a layer between our router and storage, and our
-		public server. Protocol is responsible for executing various rpc's 
+		public server. Protocol is responsible for executing various rpc's
 		in order to update routing table, storage and keep network active
 
 		Parameters
 		----------
 			source_node: Node
 				Our node (representing the current machine)
+			storage: ForgetfulStorage
+				Storage interface
 			ksize: int
 				Size of kbuckets
 		"""
 		RPCProtocol.__init__(self)
 		self.router = RoutingTable(self, ksize, source_node)
-		self._storage = None
+		self.storage = storage
 		self.source_node = source_node
-
-	@property
-	def storage(self) -> "ForgetfulStorage":
-		return self._storage
-
-	@storage.setter
-	def storage(self, store: "ForgetfulStorage") -> None:
-		assert isinstance(store, ForgetfulStorage)
-		self._storage = store
 
 	def get_refresh_ids(self):
 		"""
 		Get list of node ids with which to search, in order to keep old
 		buckets up to date.
-
-		Parameters
-		----------
-			None
 
 		Returns
 		-------
@@ -63,7 +57,7 @@ class KademliaProtocol(RPCProtocol):
 			ids.append(rid)
 		return ids
 
-	def rpc_stun(self, sender: "Node") -> "Node":  # pylint: disable=no-self-use
+	def rpc_stun(self, sender: "Node") -> "Node":  
 		"""
 		Execute a S.T.U.N procedure on a given sender
 
@@ -126,7 +120,11 @@ class KademliaProtocol(RPCProtocol):
 		self.storage[key] = value
 		return True
 
-	def rpc_find_node(self, sender: "Node", node_id: int, key: int) -> List[Tuple[int, str, int]]:
+	def rpc_find_node(self,
+		sender: "Node",
+		node_id: int,
+		key: int
+	) -> List[Tuple[int, str, int]]:
 		"""
 		Return a list of peers that are closest to a given key (node_id to be found)
 
@@ -151,8 +149,11 @@ class KademliaProtocol(RPCProtocol):
 		neighbors = self.router.find_neighbors(node, exclude=source)
 		return list(map(tuple, neighbors))
 
-	# pylint: disable=line-too-long
-	def rpc_find_value(self, sender: "Node", node_id: int, key: int) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
+	def rpc_find_value(self, 
+		sender: "Node", 
+		node_id: int, 
+		key: int
+	) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
 		"""
 		Return the value at a given key. If the key is found, return it
 		to the requestor, else execute an rpc_find_node to find neighbors
@@ -181,7 +182,10 @@ class KademliaProtocol(RPCProtocol):
 			return self.rpc_find_node(sender, node_id, key)
 		return {"value": value}
 
-	async def call_find_node(self, node_to_ask: "Node", node_to_find: "Node") -> List[Tuple[int, str, int]]:
+	async def call_find_node(self, 
+		node_to_ask: "Node", 
+		node_to_find: "Node"
+	) -> List[Tuple[int, str, int]]:
 		"""
 		Dial a given node_to_ask in order to find node_to_find
 
@@ -201,7 +205,10 @@ class KademliaProtocol(RPCProtocol):
 		result = await self.find_node(address, self.source_node.id, node_to_find.id)
 		return self.handle_call_response(result, node_to_ask)
 
-	async def call_find_value(self, node_to_ask: "Node", node_to_find: "Node") -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
+	async def call_find_value(self, 
+		node_to_ask: "Node", 
+		node_to_find: "Node"
+	) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
 		"""
 		Dial a given node_to_ask in order to find a value on node_to_find
 
@@ -222,7 +229,7 @@ class KademliaProtocol(RPCProtocol):
 		result = await self.find_value(address, self.source_node.id, node_to_find.id)
 		return self.handle_call_response(result, node_to_ask)
 
-	async def call_ping(self, node_to_ask) -> int:
+	async def call_ping(self, node_to_ask: "Node") -> int:
 		"""
 		Wrapper for rpc_ping, where we just handle the result
 
@@ -240,7 +247,7 @@ class KademliaProtocol(RPCProtocol):
 		result = await self.ping(address, self.source_node.id)
 		return self.handle_call_response(result, node_to_ask)
 
-	async def call_store(self, node_to_ask, key, value) -> bool:
+	async def call_store(self, node_to_ask: "Node", key: int, value: Any) -> bool:
 		"""
 		Wrapper for rpc_store, where we handle the result
 
@@ -262,7 +269,7 @@ class KademliaProtocol(RPCProtocol):
 		result = await self.store(address, self.source_node.id, key, value)
 		return self.handle_call_response(result, node_to_ask)
 
-	def welcome_if_new(self, node):
+	def welcome_if_new(self, node: "Node"):
 		"""
 		Given a new node, send it all the keys/values it should be storing,
 		then add it to the routing table.
@@ -320,5 +327,3 @@ class KademliaProtocol(RPCProtocol):
 		log.info("got successful response from %s", node)
 		self.welcome_if_new(node)
 		return result
-
-TKademliaProtocol = NewType("TKademliaProtocol", KademliaProtocol)

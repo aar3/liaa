@@ -1,8 +1,8 @@
-pycodestyle>=2.4.0
-pylint>=2.2.2
-sphinx>=1.6.5
-sphinxcontrib-napoleon>=0.6.1
-sphinxcontrib-zopeext>=0.2.1
-pytest>=4.1.0
-pytest-asyncio>=0.10.0
-pytest-cov>=2.6.1
+pylint
+sphinx
+sphinxcontrib-napoleon
+sphinxcontrib-zopeext
+pycodestyle
+pytest
+pytest-asyncio
+pytest-cov

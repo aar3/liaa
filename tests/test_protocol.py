@@ -59,7 +59,7 @@ class TestKademliaProtocol:
 	# pylint: disable=no-self-use
 	def test_can_init_protocol(self, mknode):
 		node = mknode(intid=1)
-		proto = KademliaProtocol(node, ksize=20)
+		proto = KademliaProtocol(node, storage=None, ksize=20)
 		proto.storage = ForgetfulStorage()
 		assert isinstance(proto, KademliaProtocol)
 

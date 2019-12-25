@@ -5,13 +5,14 @@ import random
 import pickle
 import asyncio
 import logging
-from typing import List, Tuple, Union, Optional, Any
+from typing import List, Tuple, Union, Optional
 
-from kademlia.protocol import KademliaProtocol, TKademliaProtocol
-from kademlia.utils import digest, check_dht_value_type
+from kademlia.protocol import KademliaProtocol
+from kademlia.utils import digest
 from kademlia.storage import ForgetfulStorage
 from kademlia.node import Node, Resource
 from kademlia.crawling import ValueSpiderCrawl, NodeSpiderCrawl
+from kademlia.config import CONFIG
 
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -22,7 +23,13 @@ class Server:
 
 	protocol_class = KademliaProtocol
 
-	def __init__(self, ksize=20, alpha=3, node_id=None, storage=None):
+	# pylint: disable=bad-continuation
+	def __init__(self,
+			ksize: int = CONFIG.ksize,
+			alpha: int = CONFIG.alpha,
+			node_id: Optional[int] = None,
+			storage: Optional["ForgetfulStorage"] = None
+	):
 		"""
 		High level view of a node instance.  This is the object that should be
 		created to start listening as an active node on the network.
@@ -34,9 +41,9 @@ class Server:
 				The k parameter from the paper
 			alpha: int
 				The alpha parameter from the paper
-			node_id: int
+			node_id: Optional[int]
 				The id for this node on the network.
-			storage: ForgetfulStorage
+			storage: Optional[ForgetfulStorage]
 				A storage interface
 		"""
 		self.ksize = ksize
@@ -52,14 +59,6 @@ class Server:
 		"""
 		Stop a currently running server - all event loops, and close
 		all open network connections
-
-		Parameters
-		----------
-			None
-
-		Returns
-		-------
-			None
 		"""
 		if self.transport is not None:
 			self.transport.close()
@@ -70,20 +69,16 @@ class Server:
 		if self.save_state_loop:
 			self.save_state_loop.cancel()
 
-	def _create_protocol(self) -> TKademliaProtocol:
+	def _create_protocol(self) -> "KademliaProtocol":
 		"""
 		Create an instance of the Kademlia protocol
-
-		Parameters
-		----------
-			None
 
 		Returns
 		-------
 			KademliaProtocol:
 				Instance of the kademlia protocol
 		"""
-		return self.protocol_class(self.node, self.ksize)
+		return self.protocol_class(self.node, self.storage, self.ksize)
 
 	async def listen(self, port: int, interface='0.0.0.0') -> None:
 		"""
@@ -96,13 +91,11 @@ class Server:
 				Port on which to listen
 			interface: str
 				Interface on which to bind port
-
-		Returns
-		-------
-			None
 		"""
 		loop = asyncio.get_event_loop()
-		listen = loop.create_datagram_endpoint(self._create_protocol, local_addr=(interface, port))
+		# pylint: disable=bad-continuation
+		listen = loop.create_datagram_endpoint(self._create_protocol,
+															local_addr=(interface, port))
 		log.info("Node %i listening on %s:%i", self.node.long_id, interface, port)
 		self.transport, self.protocol = await listen
 		# finally, schedule refreshing table
@@ -116,10 +109,6 @@ class Server:
 		----------
 			delay: int
 				Time to wait (secs) before executing future
-
-		Returns
-		-------
-			None
 		"""
 		log.debug("Refreshing routing table")
 		asyncio.ensure_future(self._refresh_table())
@@ -130,14 +119,6 @@ class Server:
 		"""
 		Refresh buckets that haven't had any lookups in the last hour
 		(per section 2.3 of the paper).
-
-		Parameters
-		----------
-			None
-
-		Returns
-		-------
-			None
 		"""
 		results: List[asyncio.Future] = []
 		for node_id in self.protocol.get_refresh_ids():
@@ -151,7 +132,8 @@ class Server:
 
 		# now republish keys older than one hour
 		for dkey, value in self.storage.iter_older_than(3600):
-			await self.set_digest(dkey, value)
+			resource = Resource(dkey, value)
+			await self.set_digest(resource)
 
 	def bootstrappable_neighbors(self) -> List["Node"]:
 		"""
@@ -163,13 +145,9 @@ class Server:
 		storing them if this server is going down for a while.  When it comes
 		back up, the list of nodes can be used to bootstrap.
 
-		Parameters
-		----------
-			None
-
 		Returns
 		-------
-			List["Node"]:
+			List[Node]:
 				List of peers suitable for bootstrap use
 		"""
 		neighbors: List["Node"] = self.protocol.router.find_neighbors(self.node)
@@ -246,40 +224,35 @@ class Server:
 		spider = ValueSpiderCrawl(self.protocol, rsrc, nearest, self.ksize, self.alpha)
 		return await spider.find()
 
-	async def set(self, key: Union[bytes, str], value: Any) -> asyncio.Future:
+	async def set(self, resource: "Resource") -> asyncio.Future:
 		"""
 		Set the given string key to the given value in the network. This is the
 		interface for setting a key throughout the network
 
 		Parameters
 		----------
-			key: Union[bytes, str]
-				ID of the resource to be stored
-			value: Any
-				Payload of the resource to be stored
+			resource: Resource
+				Resource to be stored
 
 		Returns
 		-------
 			asyncio.Future:
 				Callback to set_digest which finds nodes on which to store key
 		"""
-		if not check_dht_value_type(value):
+		if not resource.has_valid_value():
 			raise TypeError("Value must be of type int, float, bool, str, or bytes")
-		log.info("setting '%s' = '%s' on network", key, value)
-		dkey = digest(key)
-		return await self.set_digest(dkey, value)
+		log.info("setting '%s' = '%s' on network", resource.key, resource.value)
+		return await self.set_digest(resource)
 
-	async def set_digest(self, dkey: bytes, value: Any) -> bool:
+	async def set_digest(self, resource: "Resource") -> bool:
 		"""
 		Set the given SHA1 digest key (bytes) to the given value in the
 		network.
 
 		Parameters
 		----------
-			dkey: bytes
-				ID of reosurce to be stored
-			value: Any
-				Payload of resource to be stored
+			resource: Resource
+				Resource to be set
 
 		Returns
 		-------
@@ -287,22 +260,22 @@ class Server:
 				Indicator of whether or not the key/value pair was stored
 				on any of the nearest nodes found by the SpiderCrawler
 		"""
-		node = Node(dkey)
-
-		nearest = self.protocol.router.find_neighbors(node)
+		nearest = self.protocol.router.find_neighbors(resource.node)
 		if not nearest:
-			log.warning("There are no known neighbors to set key %s", dkey.hex())
+			log.warning("There are no known neighbors to set key %s", resource.hex())
 			return False
 
-		spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
+		spider = NodeSpiderCrawl(self.protocol, resource.node, nearest, self.ksize, self.alpha)
 		nodes = await spider.find()
-		log.info("setting '%s' on %s", dkey.hex(), list(map(str, nodes)))
+		log.info("setting '%s' on %s", resource.hex(), list(map(str, nodes)))
 
 		# if this node is close too, then store here as well
-		biggest = max([n.distance_to(node) for n in nodes])
-		if self.node.distance_to(node) < biggest:
-			self.storage[dkey] = value
-		results = [self.protocol.call_store(n, dkey, value) for n in nodes]
+		biggest = max([n.distance_to(resource.node) for n in nodes])
+		# FIXME: should just store resource and have key/value logic set at
+		# storage module level (not at network module level)
+		if self.node.distance_to(resource.node) < biggest:
+			self.storage[resource.dkey] = resource.value
+		results = [self.protocol.call_store(n, resource.dkey, resource.value) for n in nodes]
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
 
@@ -316,9 +289,7 @@ class Server:
 			fname: str
 				File location where in which to write state
 
-		Returns
-		-------
-			None
+
 		"""
 		log.info("Saving state to %s", fname)
 		# pylint: disable=bad-continuation
@@ -369,10 +340,6 @@ class Server:
 				File name to save retularly to
 			frequency: int
 				Frequency in seconds that the state should be saved. (default=10 mins)
-
-		Returns
-		-------
-			None
 		"""
 		self.save_state(fname)
 		loop = asyncio.get_event_loop()
@@ -381,6 +348,3 @@ class Server:
 												self.save_state_regularly,
 												fname,
 												frequency)
-
-
-

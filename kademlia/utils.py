@@ -1,10 +1,39 @@
-"""
-General catchall for functions that don't make sense as methods.
-"""
+import sys
 import hashlib
 import operator
+import random
 import asyncio
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Tuple, Optional
+
+
+def split_addr(addr: "str") -> Tuple[str, int]:
+	"""
+	Split a string address to tuple
+
+	Parameters
+	----------
+		addr: str
+			Address to transform
+
+	Returns
+	-------
+		Tuple[str, int]:
+			Tuple version of input address
+	"""
+	host, port = addr.split(":")
+	return host, int(port)
+
+
+def rand_id() -> str:
+	"""
+	Create a random string array
+
+	Returns
+	-------
+		str:
+			Random 255-bit string array
+	"""
+	return str(random.getrandbits(255))
 
 
 async def gather_dict(dic: Dict[str, Any]) -> Dict[str, Any]:
@@ -123,3 +152,69 @@ def check_dht_value_type(value: Any) -> bool:
 		bytes
 	]
 	return type(value) in typeset  # pylint: disable=unidiomatic-typecheck
+
+
+class ArgsParser:
+	def __init__(self):
+		"""
+		Util used to parse command line args on app start
+
+
+		"""
+		self._data: Dict[str, Union[str, int, bool]] = {}
+
+	def add_many(self, opts: List[Tuple[str, str]]) -> None:
+		"""
+		Add command line args to ArgsParser.data
+
+		Parameters
+		-----------
+			opts: List[Tuple[str, str]]
+				List of tuple key,value pairs to add
+
+
+		"""
+		for key, val in opts:
+			self._data[key] = val
+
+	def get(self, key: str, alt_key: str) -> Optional[str]:
+		"""
+		Get a key from the ArgsParser, or get the alt_key if the key
+		isnt present, else log and exit
+
+		Parameters
+		----------
+			key: str
+				First option key to fetch
+			alt_key: str
+				Second option key to fetch
+
+		Returns
+		-------
+			Optional[str]:
+				Value associated with key/alt_key
+		"""
+		try:
+			return self._data[key]
+		except KeyError:
+			try:
+				return self._data[alt_key]
+			except KeyError:
+				print(f"opt {key} {alt_key} not in args")
+				sys.exit(1)
+
+	def __contains__(self, key: str) -> bool:
+		return key in self._data
+
+	def is_help_opt(self, args: List[str]):
+		return len(args) == 1 and "-h" in args or "--help" in args
+
+	def has_proper_opts(self):
+		# pylint: disable=bad-continuation
+		required = [
+			("-i", "--ip"),
+			("-p", "--port"),
+		]
+		def has_arg(arg):
+			return arg[0] in self._data or arg[1] in self._data
+		return all(map(has_arg, required)), "missing required opts"

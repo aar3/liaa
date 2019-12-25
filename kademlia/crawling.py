@@ -1,11 +1,10 @@
 import logging
 from collections import Counter
-# pylint: disable=unused-wildcard-import,wildcard-import
-from typing import *
+import asyncio
+from typing import List, Any, Dict
 
 from kademlia.node import NodeHeap
 from kademlia.rpc import RPCFindResponse
-from kademlia.protocol import TKademliaProtocol
 from kademlia.utils import gather_dict
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -13,8 +12,14 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # pylint: disable=too-few-public-methods
 class SpiderCrawl:
-	# pylint: disable=line-too-long
-	def __init__(self, protocol: TKademliaProtocol, node: "Node", peers: List["Node"], ksize: int, alpha: int):
+	# pylint: disable=bad-continuation
+	def __init__(self,
+		protocol: "KademliaProtocol",
+		node: "Node",
+		peers: List["Node"],
+		ksize: int,
+		alpha: int
+	):
 		"""
 		The C{SpiderCrawl}er is a base class that is responsible for bootstrapping
 		various sub-classes (sub-crawlers) with a list of necessary functions,
@@ -42,15 +47,15 @@ class SpiderCrawl:
 		log.info("creating spider with peers: %s", peers)
 		self.nearest.push(peers)
 
-	async def _find(self, rpcmethod: Callable[[Any], Optional[Any]]) -> Callable[[Any], Any]:
+	async def _find(self, rpcmethod: asyncio.Future) -> asyncio.Future:
 		"""
 		Make a either a call_find_value or call_find_node rpc to our nearest
 		neighbors in attempt to find some peer
 
 		Parameters
 		-----------
-			rpcmethod: Callable[[Any], Optional[Any]]
-				The protocol's call_find_value or call_find_node.
+			rpcmethod: asyncio.Future
+				The protocol's call_find_value or call_find_node method
 
 		The process:
 		  1. calls find_* to current ALPHA nearest not already queried nodes,
@@ -63,8 +68,8 @@ class SpiderCrawl:
 
 		Returns
 		-------
-			Callable[[Any], Any]:
-				_nodes_found, which should be overloaded in sub-classes
+			asyncio.Future:
+				_nodes_found callback, which should be overloaded in sub-classes
 		"""
 		log.info("crawling network with nearest: %s", str(tuple(self.nearest)))
 		count = self.alpha
@@ -82,18 +87,19 @@ class SpiderCrawl:
 	async def _nodes_found(self, responses):
 		"""
 		A callback to execute once nodes are found via _find
-
-		Parameters
-		----------
-			responses:
-				List[Tuple[]]
-				"""
+		"""
 		raise NotImplementedError
 
 
 class ValueSpiderCrawl(SpiderCrawl):
-	# pylint: disable=line-too-long
-	def __init__(self, protocol: TKademliaProtocol, node: "Node", peers: List["Node"], ksize: int, alpha: int):
+	# pylint: disable=bad-continuation
+	def __init__(self,
+		protocol: "KademliaProtocol",
+		node: "Node",
+		peers: List["Node"],
+		ksize: int,
+		alpha: int
+	):
 		"""
 		The C{ValueCrawl}er is basically responsible for executing recursive calls
 		to our _find method, which searches our nearest nodes (and the nearest nodes
@@ -127,11 +133,6 @@ class ValueSpiderCrawl(SpiderCrawl):
 		"""
 		A wrapper for the base class's _find, where we attempt to find the
 		closest value requested using the protocols call_find_value rpc method
-
-		Parameters
-		----------
-			None
-
 		Returns
 		-------
 			Optional[Any]:
@@ -240,10 +241,6 @@ class NodeSpiderCrawl(SpiderCrawl):
 		A wrapper for the base class's _find, where we attempt to find the
 		closest node requested using the protocols call_find_node rpc method
 
-		Parameters
-		----------
-			None
-
 		Returns
 		-------
 			Callable[[Callable[None, Any]], Any]:
@@ -254,9 +251,23 @@ class NodeSpiderCrawl(SpiderCrawl):
 		"""
 		return await self._find(self.protocol.call_find_node)
 
-	async def _nodes_found(self, responses):
+	async def _nodes_found(self, responses: List[Any]) -> asyncio.Future:
 		"""
 		Handle the result of an iteration in _find.
+
+		Parameters
+		----------
+			responses: Any
+				Responses received from peer nodes via NodeCrawl execution
+
+			Where Any can include:
+				List[Tuple[int, str, int]] representing peer nodes
+				Dict[str, Any] representing found values
+
+		Returns
+		-------
+			asyncio.Future:
+				Recursive call to _find
 		"""
 		toremove = []
 		for peerid, response in responses.items():
@@ -270,4 +281,3 @@ class NodeSpiderCrawl(SpiderCrawl):
 		if self.nearest.have_contacted_all():
 			return list(self.nearest)
 		return await self.find()
-

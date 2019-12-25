@@ -9,3 +9,5 @@ class Config:
 
 	def __getattr__(self, name):
 		return self.data.get(name)
+
+CONFIG = Config()

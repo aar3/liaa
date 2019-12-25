@@ -83,10 +83,9 @@ def mkbucket():
 
 # pylint: disable=too-few-public-methods
 class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
-	def __init__(self, source_id, ksize=20):
-		super(FakeProtocol, self).__init__(source_id, ksize=ksize)
+	def __init__(self, source_id, storage=ForgetfulStorage(), ksize=20):
+		super(FakeProtocol, self).__init__(source_id, storage=storage, ksize=ksize)
 		self.router = RoutingTable(self, ksize, Node(source_id))
-		self.storage = ForgetfulStorage()
 		self.source_id = source_id
 
 @pytest.fixture()

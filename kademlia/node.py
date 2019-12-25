@@ -1,8 +1,8 @@
 from operator import itemgetter
 import heapq
-from typing import Union, Optional, List
+from typing import Union, Optional, List, Any
 
-from kademlia.utils import hex_to_base_int, digest
+from kademlia.utils import hex_to_base_int, digest, check_dht_value_type
 
 
 class Node:
@@ -63,15 +63,37 @@ class Node:
 
 
 class Resource:
-	def __init__(self, key: Union[str, bytes]):
+	def __init__(self, key: Union[str, bytes], value: Optional[Any] = None):
 		"""
 		Resource
 
 		Is a small wrapper abstraction used to represent a non-node
 		resource in the network (i.e., a value)
+
+		Parameters
+		----------
+			key: Union[str, bytes]
+				Key to be set
+			value: Optional[Any]
+				Value to be set at key (default=None)
 		"""
 		self.key = key
-		self.long_id = hex_to_base_int(digest(self.key))
+		self.dkey: bytes = digest(key)
+		self.node = Node(node_id=self.dkey)
+		self._value = value
+
+	@property
+	def value(self):
+		return self._value
+	@value.setter
+	def value(self, val: Any):
+		self._value = val
+
+	def has_valid_value(self) -> bool:
+		return check_dht_value_type(self._value)
+
+	def hex(self) -> int:
+		return self.dkey.hex()
 
 
 class NodeHeap:
@@ -106,9 +128,7 @@ class NodeHeap:
 			peers: List[Node]
 				List of peers which to prune
 
-		Returns
-		-------
-			None
+
 		"""
 		peers = set(peers)
 		if not peers:

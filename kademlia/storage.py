@@ -3,8 +3,6 @@ from itertools import takewhile
 import operator
 from collections import OrderedDict
 from abc import abstractmethod, ABC
-# pylint: disable=wildcard-import,unused-wildcard-import
-from typing import *
 
 
 class IStorage(ABC):

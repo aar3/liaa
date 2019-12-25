@@ -3,6 +3,8 @@ import asyncio
 
 from kademlia.network import Server
 from kademlia.protocol import KademliaProtocol
+from kademlia.node import Resource
+from kademlia.utils import rand_id
 
 
 PORT = 8765
@@ -70,9 +72,9 @@ class TestServer:
 		husk_server.stop()
 
 	def test_set_digest_returns_void_when_node_has_no_neighbors(self):
-		dkey = os.urandom(16)
 		server = Server()
 		# pylint: disable=protected-access
+		rsrc = Resource(key=rand_id(), value=rand_id())
 		server.protocol = server._create_protocol()
-		result = asyncio.run(server.set_digest(dkey, "foo"))
+		result = asyncio.run(server.set_digest(rsrc))
 		assert not result
