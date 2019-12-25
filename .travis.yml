@@ -4,6 +4,9 @@ python:
 dist:
   - xenial
 
+services:
+    - docker
+
 before_install:
   - sudo apt-get update
   - sudo apt-get -y install gcc-4.8
@@ -23,8 +26,5 @@ jobs:
         env:
           - WORKDIR=/home/travis/build/ralston3/kademlia
           - APPDIR=${WORKDIR}/kademlia
-
-      # - stage: "Deploy application"
-      #   script: make run
 
       # push image to repo

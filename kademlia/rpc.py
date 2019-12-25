@@ -72,11 +72,6 @@ class RPCFindResponse:
 	def did_happen(self) -> bool:
 		"""
 		Did the other host actually respond?
-
-		Parameters
-		----------
-			None
-
 		Returns
 		-------
 			bool:
@@ -87,11 +82,6 @@ class RPCFindResponse:
 	def has_value(self) -> bool:
 		"""
 		Return whether or not the response has a value
-
-		Parameters
-		----------
-			None
-
 		Returns
 		-------
 			bool:
@@ -102,11 +92,6 @@ class RPCFindResponse:
 	def get_value(self) -> Any:
 		"""
 		Get the value/payload from a response that contains a value
-
-		Parameters
-		----------
-			None
-
 		Returns
 		-------
 			Any:
@@ -118,11 +103,6 @@ class RPCFindResponse:
 		"""
 		Get the node list in the response.  If there's no value, this should
 		be set.
-
-		Parameters
-		----------
-			None
-
 		Returns
 		-------
 			List["Node"]:
@@ -155,11 +135,6 @@ class Datagram:
 
 		If len(dgram) < 22, then there isnt enough data to unpack a
 		request/response byte, and a msg id
-
-		Parameters
-		----------
-			None
-
 		Returns
 		-------
 			bool
@@ -172,9 +147,7 @@ class Datagram:
 		data is a byte array, as well as whether or not is data consists
 		of two parts - a RPC function name, and RPC function args
 
-		Parameters
-		----------
-			None
+
 
 		Return
 		------
@@ -214,9 +187,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 				The transport representing the connection. The protocol is
 				responsible for storing the reference to its transport
 
-		Returns
-		-------
-			None
+
 		"""
 		self.transport = transport
 
@@ -231,9 +202,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			addr: Tuple
 				address of the peer sending the data; the exact format depends on the transport.
 
-		Returns
-		-------
-			None
+
 		"""
 		log.debug("received dgram from %s", addr)
 		asyncio.ensure_future(self._solve_dgram(data, addr))
@@ -249,9 +218,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			address: Tuple
 				Address of sending peer
 
-		Returns
-		-------
-			None
+
 		"""
 		dgram = Datagram(buff)
 
@@ -277,9 +244,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			address: Tuple
 				Address of peer receiving response
 
-		Returns
-		-------
-			None
+
 		"""
 		msgargs = (base64.b64encode(dgram.id), address)
 		if dgram.id not in self._outstanding_msgs:
@@ -302,9 +267,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			address: Tuple
 				Address of sender
 
-		Returns
-		-------
-			None
+
 		"""
 		if dgram.is_malformed():
 			raise MalformedMessage("Could not read packet: %s" % dgram.data)
@@ -342,9 +305,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			msg_id: int
 				ID of datagram future to cancel
 
-		Returns
-		-------
-			None
+
 		"""
 		args = (base64.b64encode(msg_id), self._wait)
 		log.error("Did not received reply for msg id %s within %i seconds", *args)
@@ -380,6 +341,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			future = loop.create_future()
 			timeout = loop.call_later(self._wait, self._timeout, msg_id)
 			self._queue.enqueue_fut(msg_id, future, timeout)
+			self._outstanding_msgs[msg_id] = (future, timeout)
 			return future
 
 		return func
