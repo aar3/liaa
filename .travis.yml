@@ -26,5 +26,5 @@ jobs:
         env:
           - WORKDIR=/home/travis/build/ralston3/kademlia
           - APPDIR=${WORKDIR}/kademlia
-
-      # push image to repo
+        after_success:
+            - codecov

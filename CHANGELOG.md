@@ -16,3 +16,4 @@
 - [enhancement] continue support for CI (Docker, travis)
 - [enhancement] create multi-peer working examples (examples/network.py)
 - [chore] cleanup docstrings and types for all modules
+- [enhancement] add coveralls support - https://coveralls.io
