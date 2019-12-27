@@ -18,7 +18,7 @@ from kademlia.network import Server
 from kademlia.node import Node
 from kademlia.protocol import KademliaProtocol
 from kademlia.routing import RoutingTable, KBucket
-from kademlia.storage import ForgetfulStorage
+from kademlia.storage import EphemeralStorage
 
 
 @pytest.yield_fixture
@@ -83,7 +83,7 @@ def mkbucket():
 
 # pylint: disable=too-few-public-methods
 class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
-	def __init__(self, source_id, storage=ForgetfulStorage(), ksize=20):
+	def __init__(self, source_id, storage=EphemeralStorage(), ksize=20):
 		super(FakeProtocol, self).__init__(source_id, storage=storage, ksize=ksize)
 		self.router = RoutingTable(self, ksize, Node(source_id))
 		self.source_id = source_id

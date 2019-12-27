@@ -46,7 +46,7 @@ class SpiderCrawl:
 		self.last_ids_crawled = []
 		self.nearest.push(peers)
 
-		log.info("Node %s creating spider with %i peers", str(self.node), len(peers))
+		log.info("Node %s creating spider with %i peers", self.node, len(peers))
 
 	async def _find(self, rpcmethod: asyncio.Future) -> asyncio.Future:
 		"""
@@ -72,7 +72,9 @@ class SpiderCrawl:
 			asyncio.Future:
 				_nodes_found callback, which should be overloaded in sub-classes
 		"""
-		log.info("Node %s making find with %s on nearest: %s", str(self.node), rpcmethod.__name__, str(tuple(self.nearest)))
+		# pylint: disable=bad-continuation
+		log.info("Node %s making find with %s on nearest: %s", self.node,
+				rpcmethod.__name__, str(tuple(self.nearest)))
 		count = self.alpha
 		if self.nearest.get_ids() == self.last_ids_crawled:
 			count = len(self.nearest)
@@ -206,8 +208,8 @@ class ValueSpiderCrawl(SpiderCrawl):
 
 	async def _handle_found_values(self, values: List[Dict[str, Any]]):
 		"""
-		We got some values!  Exciting.  But let's make sure they're all the 
-		same or freak out a little bit.  Also, make sure we tell the nearest 
+		We got some values!  Exciting.  But let's make sure they're all the
+		same or freak out a little bit.  Also, make sure we tell the nearest
 		node that *didn't* have the value to store it.
 
 		Basically this method is responsible for caching found values closer
@@ -226,12 +228,12 @@ class ValueSpiderCrawl(SpiderCrawl):
 		"""
 		value_counts = Counter(values)
 		if len(value_counts) != 1:
-			log.warning("Node %s multiple values for %s", str(self.node), str(values))
+			log.warning("Node %s multiple values for %s", self.node, str(values))
 		value = value_counts.most_common(1)[0][0]
 
 		peer = self.nearest_without_value.popleft()
 		if peer:
-			log.debug("Node %s asking nearest node %i to store %s", str(self.node), peer.long_id, str(value))
+			log.debug("Node %s asking nearest node %i to store %s", self.node, peer.long_id, str(value))
 			await self.protocol.call_store(peer, self.node.digest_id, value)
 		return value
 
@@ -274,7 +276,7 @@ class NodeSpiderCrawl(SpiderCrawl):
 		for peerid, response in responses.items():
 			response = RPCFindResponse(response)
 			if not response.did_happen():
-				log.debug("Node %s encountered empty response, removing...", str(self.node))
+				log.debug("Node %s encountered empty response, removing...", self.node)
 				toremove.append(peerid)
 			else:
 				self.nearest.push(response.get_node_list())

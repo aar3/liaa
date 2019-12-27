@@ -17,7 +17,7 @@ class KademliaProtocol(RPCProtocol):
 	# pylint: disable=no-self-use,bad-continuation
 	def __init__(self,
 		source_node: "Node",
-		storage: "ForgetfulStorage",
+		storage: "EphemeralStorage",
 		ksize: int
 	):
 		"""
@@ -31,7 +31,7 @@ class KademliaProtocol(RPCProtocol):
 		----------
 			source_node: Node
 				Our node (representing the current machine)
-			storage: ForgetfulStorage
+			storage: EphemeralStorage
 				Storage interface
 			ksize: int
 				Size of kbuckets

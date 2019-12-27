@@ -5,7 +5,7 @@ from typing import List, Tuple, Union, Optional
 
 from kademlia.protocol import KademliaProtocol
 from kademlia.utils import digest, rand_digest_id
-from kademlia.storage import ForgetfulStorage
+from kademlia.storage import EphemeralStorage
 from kademlia.node import Node, NodeType
 from kademlia.crawling import ValueSpiderCrawl, NodeSpiderCrawl
 from kademlia.config import CONFIG
@@ -24,7 +24,7 @@ class Server:
 			ksize: int = CONFIG.ksize,
 			alpha: int = CONFIG.alpha,
 			node_id: Optional[int] = None,
-			storage: Optional["ForgetfulStorage"] = None
+			storage: Optional["EphemeralStorage"] = None
 	):
 		"""
 		High level view of a node instance.  This is the object that should be
@@ -39,12 +39,12 @@ class Server:
 				The alpha parameter from the paper
 			node_id: Optional[int]
 				The id for this node on the network.
-			storage: Optional[ForgetfulStorage]
+			storage: Optional[EphemeralStorage]
 				A storage interface
 		"""
 		self.ksize = ksize
 		self.alpha = alpha
-		self.storage = storage or ForgetfulStorage()
+		self.storage = storage or EphemeralStorage()
 		self.node = Node(node_id or rand_digest_id())
 		self.transport = None
 		self.protocol = None
@@ -92,10 +92,10 @@ class Server:
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
 															local_addr=(interface, port))
-		
-		self.node.ip = interface 
+
+		self.node.ip = interface
 		self.node.port = port
-		log.info("Node %s listening at %s:%i", str(self.node), interface, port)
+		log.info("Node %s listening at %s:%i", self.node, interface, port)
 		self.transport, self.protocol = await listen
 		# finally, schedule refreshing table
 		self.refresh_table()
@@ -109,7 +109,7 @@ class Server:
 			delay: int
 				Time to wait (secs) before executing future
 		"""
-		log.debug("Refreshing routing table for %s", str(self.node))
+		log.debug("Refreshing routing table for %s", self.node)
 		asyncio.ensure_future(self._refresh_table())
 		loop = asyncio.get_event_loop()
 		self.refresh_loop = loop.call_later(delay, self.refresh_table)
@@ -123,7 +123,7 @@ class Server:
 		for digest_id in self.protocol.get_refresh_ids():
 			node = Node(digest_id)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
-			log.debug("Node %s refreshing routing table on %i nearest", str(self.node), len(nearest))
+			log.debug("Node %s refreshing routing table on %i nearest", self.node, len(nearest))
 			spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 			results.append(spider.find())
 
@@ -133,7 +133,7 @@ class Server:
 		# now republish keys older than one hour
 		for dkey, value in self.storage.iter_older_than(3600):
 			node = Node(dkey, type=NodeType.Resource, value=value)
-			log.debug("Node %s republishing resource node %i", str(self.node), str(node))
+			log.debug("Node %s republishing resource node %i", self.node, str(node))
 			await self.set_digest(node)
 
 	def bootstrappable_neighbors(self) -> List["Node"]:
@@ -170,7 +170,7 @@ class Server:
 				scheduled callback for a NodeSpiderCrawl to continue crawling
 				network in order to find peers for self.node
 		"""
-		log.debug("Node %s attempting to bootstrap node with %i initial contacts", str(self.node), len(addrs))
+		log.debug("Node %s attempting to bootstrap node with %i initial contacts", self.node, len(addrs))
 		cos = list(map(self.bootstrap_node, addrs))
 		gathered = await asyncio.gather(*cos)
 		nodes = [node for node in gathered if node is not None]
@@ -212,7 +212,7 @@ class Server:
 				A recursive call to ValueSpiderCrawl.find which will terminate
 				either when the value is find or the search is exhausted
 		"""
-		log.info("Node %s looking up key %s", str(self.node), key)
+		log.info("Node %s looking up key %s", self.node, key)
 		dkey = digest(key)
 		# if this node has it, return it
 		if self.storage.get(dkey) is not None:
@@ -290,7 +290,7 @@ class Server:
 			fname: str
 				File location where in which to write state
 		"""
-		log.info("%i saving state to %s", str(self.node), fname)
+		log.info("%i saving state to %s", self.node, fname)
 		# pylint: disable=bad-continuation
 		data = {
 			'ksize': self.ksize,
@@ -299,7 +299,7 @@ class Server:
 			'neighbors': self.bootstrappable_neighbors()
 		}
 		if not data['neighbors']:
-			log.warning("Node %s has no known neighbors, so not writing to cache.", str(self.node))
+			log.warning("Node %s has no known neighbors, so not writing to cache.", self.node)
 			return
 		with open(fname, 'wb') as file:
 			pickle.dump(data, file)
@@ -319,7 +319,7 @@ class Server:
 			Server:
 				Parameterized instance of a Server
 		"""
-		log.info("%i loading state from %s", str(self.node), fname)
+		log.info("%i loading state from %s", self.node, fname)
 		with open(fname, 'rb') as file:
 			data = pickle.load(file)
 		svr = Server(data['ksize'], data['alpha'], data['id'])

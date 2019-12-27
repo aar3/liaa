@@ -84,7 +84,7 @@ class Node:
 		# by the two nodes having the same server
 		if self.type == NodeType.Peer:
 			return self.ip == other.ip and self.port == other.port
-	
+
 		# if we're dealing with a resource node, we say two nodes are the same
 		# if they have the same value
 		return self.value == other.value
@@ -107,7 +107,7 @@ class NodeHeap:
 		"""
 		NodeHead
 
-		A heaped binary tree featuring a set of neighbors ordered by distance 
+		A heaped binary tree featuring a set of neighbors ordered by distance
 		via `node.distance_to()`. The heap can contain up maxsize nodes, and
 		will return min(len(NodeHeap), maxsize) nodes from __iter__
 

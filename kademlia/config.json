@@ -3,6 +3,7 @@
    "port": 9999,
    "ksize": 20,
    "alpha": 3,
-   "state_file": "./state.dat",
-   "storage": "forgetful"
+   "persist_dir": ".kademlia",
+   "state_file": ".kademlia/state.dat",
+   "storage": "disk"
 }

@@ -5,7 +5,7 @@ import time
 # pylint: disable=bad-continuation
 from kademlia.rpc import RPCMessageQueue, Datagram
 from kademlia.protocol import KademliaProtocol
-from kademlia.storage import ForgetfulStorage
+from kademlia.storage import EphemeralStorage
 
 
 class TestRPCMessageQueue:
@@ -60,7 +60,7 @@ class TestKademliaProtocol:
 	def test_can_init_protocol(self, mknode):
 		node = mknode(intid=1)
 		proto = KademliaProtocol(node, storage=None, ksize=20)
-		proto.storage = ForgetfulStorage()
+		proto.storage = EphemeralStorage()
 		assert isinstance(proto, KademliaProtocol)
 
 	def test_can_refresh_ids(self, mknode, mkbucket, fake_proto):
