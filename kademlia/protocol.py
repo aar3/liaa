@@ -4,10 +4,10 @@ import random
 # pylint: disable=unused-wildcard-import,wildcard-import
 from typing import *
 
-from kademlia.node import Node
+from kademlia.node import Node, NodeType
 from kademlia.routing import RoutingTable
 from kademlia.rpc import RPCProtocol
-from kademlia.utils import digest, hex_to_base_int
+from kademlia.utils import hex_to_int, join_addr
 
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -57,7 +57,7 @@ class KademliaProtocol(RPCProtocol):
 			ids.append(rid)
 		return ids
 
-	def rpc_stun(self, sender: "Node") -> "Node":  
+	def rpc_stun(self, sender: "Node") -> "Node":
 		"""
 		Execute a S.T.U.N procedure on a given sender
 
@@ -91,8 +91,9 @@ class KademliaProtocol(RPCProtocol):
 				ID of requesting node
 		"""
 		source = Node(node_id, sender[0], sender[1])
+		log.debug("ping request from %s", join_addr(sender))
 		self.welcome_if_new(source)
-		return self.source_node.id
+		return self.source_node.digest_id
 
 	def rpc_store(self, sender: "Node", node_id: int, key: int, value: Any) -> bool:
 		"""
@@ -116,7 +117,7 @@ class KademliaProtocol(RPCProtocol):
 		"""
 		source = Node(node_id, sender[0], sender[1])
 		self.welcome_if_new(source)
-		log.debug("got a store request from %s, storing '%s'='%s'", sender, key.hex(), value)
+		log.debug("store request from %s, storing %iB at %s", join_addr(sender), len(value), key.hex())
 		self.storage[key] = value
 		return True
 
@@ -142,16 +143,16 @@ class KademliaProtocol(RPCProtocol):
 			List[Tuple[int, str, int]]:
 				Addresses of closest neighbors in regards to resource `key`
 		"""
-		log.info("finding neighbors of %i in local table", hex_to_base_int(node_id.hex()))
+		log.info("finding neighbors of %i in local table", hex_to_int(node_id.hex()))
 		source = Node(node_id, sender[0], sender[1])
 		self.welcome_if_new(source)
 		node = Node(key)
 		neighbors = self.router.find_neighbors(node, exclude=source)
 		return list(map(tuple, neighbors))
 
-	def rpc_find_value(self, 
-		sender: "Node", 
-		node_id: int, 
+	def rpc_find_value(self,
+		sender: "Node",
+		node_id: int,
 		key: int
 	) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
 		"""
@@ -182,8 +183,8 @@ class KademliaProtocol(RPCProtocol):
 			return self.rpc_find_node(sender, node_id, key)
 		return {"value": value}
 
-	async def call_find_node(self, 
-		node_to_ask: "Node", 
+	async def call_find_node(self,
+		node_to_ask: "Node",
 		node_to_find: "Node"
 	) -> List[Tuple[int, str, int]]:
 		"""
@@ -202,11 +203,11 @@ class KademliaProtocol(RPCProtocol):
 				Nodes closes to node_to_find which to continue search
 		"""
 		address = (node_to_ask.ip, node_to_ask.port)
-		result = await self.find_node(address, self.source_node.id, node_to_find.id)
+		result = await self.find_node(address, self.source_node.digest_id, node_to_find.digest_id)
 		return self.handle_call_response(result, node_to_ask)
 
-	async def call_find_value(self, 
-		node_to_ask: "Node", 
+	async def call_find_value(self,
+		node_to_ask: "Node",
 		node_to_find: "Node"
 	) -> Union[List[Tuple[int, str, int]], Dict[str, Any]]:
 		"""
@@ -222,11 +223,11 @@ class KademliaProtocol(RPCProtocol):
 		Returns
 		-------
 			Union[List[Tuple[int, str, int]], Dict[str, Any]]:
-				Either the list of nodes clos'er' to the key associated with this
+				Either the list of nodes close(r) to the key associated with this
 				value, or the actual value
 		"""
 		address = (node_to_ask.ip, node_to_ask.port)
-		result = await self.find_value(address, self.source_node.id, node_to_find.id)
+		result = await self.find_value(address, self.source_node.digest_id, node_to_find.id)
 		return self.handle_call_response(result, node_to_ask)
 
 	async def call_ping(self, node_to_ask: "Node") -> int:
@@ -244,7 +245,7 @@ class KademliaProtocol(RPCProtocol):
 				ID of peer responding to ping
 		"""
 		address = (node_to_ask.ip, node_to_ask.port)
-		result = await self.ping(address, self.source_node.id)
+		result = await self.ping(address, self.source_node.digest_id)
 		return self.handle_call_response(result, node_to_ask)
 
 	async def call_store(self, node_to_ask: "Node", key: int, value: Any) -> bool:
@@ -266,7 +267,7 @@ class KademliaProtocol(RPCProtocol):
 				Indication that store operation was succesful
 		"""
 		address = (node_to_ask.ip, node_to_ask.port)
-		result = await self.store(address, self.source_node.id, key, value)
+		result = await self.store(address, self.source_node.digest_id, key, value)
 		return self.handle_call_response(result, node_to_ask)
 
 	def welcome_if_new(self, node: "Node"):
@@ -288,18 +289,18 @@ class KademliaProtocol(RPCProtocol):
 		if not self.router.is_new_node(node):
 			return
 
-		log.info("never seen %s before, adding to router", node)
+		log.info("welcoming new node %s, adding to router", node)
 
-		for key, value in self.storage:
-			keynode = Node(digest(key))
+		for dkey, value in self.storage:
+			keynode = Node(dkey, type=NodeType.Resource, value=value)
 			neighbors = self.router.find_neighbors(keynode)
 			if neighbors:
-				last = neighbors[-1].distance_to(keynode)
-				new_node_close = node.distance_to(keynode) < last
-				first = neighbors[0].distance_to(keynode)
-				this_closest = self.source_node.distance_to(keynode) < first
-			if not neighbors or (new_node_close and this_closest):
-				asyncio.ensure_future(self.call_store(node, key, value))
+				furthest = neighbors[-1].distance_to(keynode)
+				is_closer_than_furthest = node.distance_to(keynode) < furthest
+				closest_distance_to_new = neighbors[0].distance_to(keynode)
+				curr_distance_to_new = self.source_node.distance_to(keynode) < closest_distance_to_new
+			if not neighbors or (is_closer_than_furthest and curr_distance_to_new):
+				asyncio.ensure_future(self.call_store(node, dkey, value))
 		self.router.add_contact(node)
 
 	def handle_call_response(self, result: Any, node: "Node"):
@@ -324,6 +325,6 @@ class KademliaProtocol(RPCProtocol):
 			self.router.remove_contact(node)
 			return result
 
-		log.info("got successful response from %s", node)
+		log.info("handling successful response from %s", node)
 		self.welcome_if_new(node)
 		return result

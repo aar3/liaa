@@ -7,7 +7,7 @@ SYS_PYTHON3=/usr/local/bin/python3.7
 .DEFAULT: help
 
 ci-test:
-	python -m pytest tests/*
+	python -m pytest tests/* --cov-report term --cov=./
 	@echo "ci-test step finished"
 
 clean:
@@ -44,7 +44,7 @@ help:
 	@echo "  run test suite"
 
 local-test: ${VENV_PYTHON3}
-	${VENV_PYTHON3} -m pytest tests/*
+	${VENV_PYTHON3} -m pytest tests/* --cov-report term --cov=./
 	@echo "local-test step finished"
 
 lint: ${VENV_PYTHON3}

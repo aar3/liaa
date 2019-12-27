@@ -2,18 +2,24 @@
 
 ### 12.15.19
 - [fork] fork original repo at https://github.com/bmuller/kademlia
-- [enhancement] add unit test coverage
+- [enhancement] add unit test coverage to all modules
 - [enhancement] augment protocol module with a few abstractions
 - [enhancement] add rpc module (similar to protocol but segmenting rpc from kademlia)
+   - Datagram
+   - RPCMessageQueue
 - [chore] add docstrings and typings
 
 ### 12.22.19
-- [chore] add docstrings and typings
-- [enhancement] add tests for protocol module
-- [refactor] change some naming for more clarity/explicitness
-- [chore] add docstrings, typings, and tests to all modules
-- [enhancement] add Docker support
-- [enhancement] continue support for CI (Docker, travis)
-- [enhancement] create multi-peer working examples (examples/network.py)
 - [chore] cleanup docstrings and types for all modules
+   - add docstrings and typings
+   - change some naming for more clarity/explicitness
+- [enhancement] add tests for protocol module
+- [enhancement] add CI support
+   - add Docker support
+   - add travis support
+   - add code coverage support
+- [enhancement] create multi-peer working examples (examples/network.py)
+
 - [enhancement] add coveralls support - https://coveralls.io
+- [enhancement] add logging
+   - distinguish between Node, Peer, and Resource

@@ -1,16 +1,12 @@
-"""
-Package for interacting on the network at a high level.
-"""
-import random
 import pickle
 import asyncio
 import logging
 from typing import List, Tuple, Union, Optional
 
 from kademlia.protocol import KademliaProtocol
-from kademlia.utils import digest
+from kademlia.utils import digest, rand_digest_id
 from kademlia.storage import ForgetfulStorage
-from kademlia.node import Node, Resource
+from kademlia.node import Node, NodeType
 from kademlia.crawling import ValueSpiderCrawl, NodeSpiderCrawl
 from kademlia.config import CONFIG
 
@@ -49,7 +45,7 @@ class Server:
 		self.ksize = ksize
 		self.alpha = alpha
 		self.storage = storage or ForgetfulStorage()
-		self.node = Node(node_id or digest(random.getrandbits(255)))
+		self.node = Node(node_id or rand_digest_id())
 		self.transport = None
 		self.protocol = None
 		self.refresh_loop = None
@@ -96,7 +92,10 @@ class Server:
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
 															local_addr=(interface, port))
-		log.info("Node %i listening on %s:%i", self.node.long_id, interface, port)
+		
+		self.node.ip = interface 
+		self.node.port = port
+		log.info("Node %s listening at %s:%i", str(self.node), interface, port)
 		self.transport, self.protocol = await listen
 		# finally, schedule refreshing table
 		self.refresh_table()
@@ -110,7 +109,7 @@ class Server:
 			delay: int
 				Time to wait (secs) before executing future
 		"""
-		log.debug("Refreshing routing table")
+		log.debug("Refreshing routing table for %s", str(self.node))
 		asyncio.ensure_future(self._refresh_table())
 		loop = asyncio.get_event_loop()
 		self.refresh_loop = loop.call_later(delay, self.refresh_table)
@@ -121,9 +120,10 @@ class Server:
 		(per section 2.3 of the paper).
 		"""
 		results: List[asyncio.Future] = []
-		for node_id in self.protocol.get_refresh_ids():
-			node = Node(node_id)
+		for digest_id in self.protocol.get_refresh_ids():
+			node = Node(digest_id)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
+			log.debug("Node %s refreshing routing table on %i nearest", str(self.node), len(nearest))
 			spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 			results.append(spider.find())
 
@@ -132,8 +132,9 @@ class Server:
 
 		# now republish keys older than one hour
 		for dkey, value in self.storage.iter_older_than(3600):
-			resource = Resource(dkey, value)
-			await self.set_digest(resource)
+			node = Node(dkey, type=NodeType.Resource, value=value)
+			log.debug("Node %s republishing resource node %i", str(self.node), str(node))
+			await self.set_digest(node)
 
 	def bootstrappable_neighbors(self) -> List["Node"]:
 		"""
@@ -169,7 +170,7 @@ class Server:
 				scheduled callback for a NodeSpiderCrawl to continue crawling
 				network in order to find peers for self.node
 		"""
-		log.debug("Attempting to bootstrap node with %i initial contacts", len(addrs))
+		log.debug("Node %s attempting to bootstrap node with %i initial contacts", str(self.node), len(addrs))
 		cos = list(map(self.bootstrap_node, addrs))
 		gathered = await asyncio.gather(*cos)
 		nodes = [node for node in gathered if node is not None]
@@ -192,7 +193,7 @@ class Server:
 				None if ping was unsuccessful, or peer as Node if ping
 				was successful
 		"""
-		result = await self.protocol.ping(addr, self.node.id)
+		result = await self.protocol.ping(addr, self.node.digest_id)
 		return Node(result[1], addr[0], addr[1]) if result[0] else None
 
 	async def get(self, key: Union[str, bytes]) -> asyncio.Future:
@@ -211,48 +212,48 @@ class Server:
 				A recursive call to ValueSpiderCrawl.find which will terminate
 				either when the value is find or the search is exhausted
 		"""
-		log.info("Looking up key %s", key)
+		log.info("Node %s looking up key %s", str(self.node), key)
 		dkey = digest(key)
 		# if this node has it, return it
 		if self.storage.get(dkey) is not None:
-			return self.storage.get(dkey)
-		rsrc = Resource(dkey)
-		nearest = self.protocol.router.find_neighbors(rsrc)
+			return self.storage[dkey]
+		node = Node(dkey, type=NodeType.Resource)
+		nearest = self.protocol.router.find_neighbors(node)
 		if not nearest:
-			log.warning("There are no known neighbors to get key %s", key)
+			log.warning("There are no known neighbors to get key %s", str(node))
 			return None
-		spider = ValueSpiderCrawl(self.protocol, rsrc, nearest, self.ksize, self.alpha)
+		spider = ValueSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 		return await spider.find()
 
-	async def set(self, resource: "Resource") -> asyncio.Future:
+	async def set(self, node: "Node") -> asyncio.Future:
 		"""
 		Set the given string key to the given value in the network. This is the
 		interface for setting a key throughout the network
 
 		Parameters
 		----------
-			resource: Resource
-				Resource to be stored
+			node: Node
+				Node to be stored
 
 		Returns
 		-------
 			asyncio.Future:
 				Callback to set_digest which finds nodes on which to store key
 		"""
-		if not resource.has_valid_value():
+		if not node.has_valid_value():
 			raise TypeError("Value must be of type int, float, bool, str, or bytes")
-		log.info("setting '%s' = '%s' on network", resource.key, resource.value)
-		return await self.set_digest(resource)
+		log.info("setting '%s' = '%s' on network", str(node), node.value)
+		return await self.set_digest(node)
 
-	async def set_digest(self, resource: "Resource") -> bool:
+	async def set_digest(self, node: "Node") -> bool:
 		"""
 		Set the given SHA1 digest key (bytes) to the given value in the
 		network.
 
 		Parameters
 		----------
-			resource: Resource
-				Resource to be set
+			node: Node
+				Node to be set (where node.type == NodeType.Resource)
 
 		Returns
 		-------
@@ -260,22 +261,22 @@ class Server:
 				Indicator of whether or not the key/value pair was stored
 				on any of the nearest nodes found by the SpiderCrawler
 		"""
-		nearest = self.protocol.router.find_neighbors(resource.node)
+		nearest = self.protocol.router.find_neighbors(node)
 		if not nearest:
-			log.warning("There are no known neighbors to set key %s", resource.hex())
+			log.warning("There are no known neighbors to set key %s", node.hex)
 			return False
 
-		spider = NodeSpiderCrawl(self.protocol, resource.node, nearest, self.ksize, self.alpha)
+		spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 		nodes = await spider.find()
-		log.info("setting '%s' on %s", resource.hex(), list(map(str, nodes)))
+		log.info("setting '%s' on %s", str(node), list(map(str, nodes)))
 
 		# if this node is close too, then store here as well
-		biggest = max([n.distance_to(resource.node) for n in nodes])
+		biggest = max([n.distance_to(node) for n in nodes])
 		# FIXME: should just store resource and have key/value logic set at
 		# storage module level (not at network module level)
-		if self.node.distance_to(resource.node) < biggest:
-			self.storage[resource.dkey] = resource.value
-		results = [self.protocol.call_store(n, resource.dkey, resource.value) for n in nodes]
+		if self.node.distance_to(node) < biggest:
+			self.storage[node.digest_id] = node.value
+		results = [self.protocol.call_store(n, node.digest_id, node.value) for n in nodes]
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
 
@@ -288,25 +289,22 @@ class Server:
 		----------
 			fname: str
 				File location where in which to write state
-
-
 		"""
-		log.info("Saving state to %s", fname)
+		log.info("%i saving state to %s", str(self.node), fname)
 		# pylint: disable=bad-continuation
 		data = {
 			'ksize': self.ksize,
 			'alpha': self.alpha,
-			'id': self.node.id,
+			'id': self.node.digest_id,
 			'neighbors': self.bootstrappable_neighbors()
 		}
 		if not data['neighbors']:
-			log.warning("No known neighbors, so not writing to cache.")
+			log.warning("Node %s has no known neighbors, so not writing to cache.", str(self.node))
 			return
 		with open(fname, 'wb') as file:
 			pickle.dump(data, file)
 
-	@classmethod
-	def load_state(cls, fname: str) -> "Server":
+	def load_state(self, fname: str) -> "Server":
 		"""
 		Load the state of this node (the alpha/ksize/id/immediate neighbors)
 		from a cache file with the given fname.
@@ -321,7 +319,7 @@ class Server:
 			Server:
 				Parameterized instance of a Server
 		"""
-		log.info("Loading state from %s", fname)
+		log.info("%i loading state from %s", str(self.node), fname)
 		with open(fname, 'rb') as file:
 			data = pickle.load(file)
 		svr = Server(data['ksize'], data['alpha'], data['id'])

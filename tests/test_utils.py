@@ -6,9 +6,15 @@ from kademlia.utils import (
 	digest,
 	shared_prefix,
 	bytes_to_bit_string,
-	hex_to_base_int,
+	hex_to_int,
 	check_dht_value_type,
-	gather_dict
+	gather_dict,
+	join_addr,
+	split_addr,
+	rand_str,
+	rand_int_id,
+	digest_to_int,
+	int_to_digest
 )
 
 
@@ -42,7 +48,7 @@ class TestUtils:
 	def test_to_base16_int(self):
 		num = 5
 		num_as_bytes = bytes([num])
-		assert hex_to_base_int(num_as_bytes.hex()) == num
+		assert hex_to_int(num_as_bytes.hex()) == num
 
 	def test_check_dht_value_type_returns_true_when_arg_is_valid(self):
 		# pylint: disable=invalid-name
@@ -85,3 +91,31 @@ class TestUtils:
 		assert len(results) == 3
 
 		assert all(map(lambda p: not p[1], results.items()))
+
+	def test_join_addr(self):
+		addr = ("0.0.0.0", 8000)
+		assert join_addr(addr) == "0.0.0.0:8000"
+
+	def test_split_addr(self):
+		addr = "0.0.0.0:8000"
+		assert split_addr(addr) == ("0.0.0.0", 8000)
+
+	def test_rand_str(self):
+		result = rand_str()
+		assert isinstance(result, str)
+		assert len(result) == 20
+
+	def test_rand_int_id(self):
+		result = rand_int_id()
+		assert isinstance(result, int)
+		assert 0 < result < 2**160
+
+	def test_digest_to_int(self):
+		num = 10
+		byte_arr = num.to_bytes(16, byteorder='big')
+		assert digest_to_int(byte_arr) == num
+
+	def test_int_to_digest(self):
+		num = 10
+		byte_arr = num.to_bytes((num.bit_length() // 8) + 1, byteorder='big')
+		assert byte_arr == int_to_digest(num)

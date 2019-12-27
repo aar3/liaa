@@ -4,8 +4,8 @@ import sys
 import getopt
 
 from kademlia.network import Server
-from kademlia.node import Resource
-from kademlia.utils import rand_id, split_addr, ArgsParser
+from kademlia.node import Node, NodeType
+from kademlia.utils import rand_int_id, rand_str, split_addr, ArgsParser, int_to_digest
 
 
 def network_example_usage():
@@ -77,9 +77,11 @@ def main():
 	# network and store it on our node (we can verify via logs that this
 	# resource was properly shared through the network)
 	while True:
-		# pylint: disable=invalid-name
-		r = Resource(key=rand_id(), value=rand_id())
-		loop.run_until_complete(server.set(r))
+
+		# create a resource node and set it on our current routing table
+		int_id = rand_int_id()
+		resource = Node(int_to_digest(int_id), type=NodeType.Resource, value=rand_str())
+		loop.run_until_complete(server.set(resource))
 		loop.run_until_complete(asyncio.sleep(5))
 
 	# we should shutdown gracefully

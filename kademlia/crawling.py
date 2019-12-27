@@ -44,13 +44,14 @@ class SpiderCrawl:
 		self.node = node
 		self.nearest = NodeHeap(self.node, self.ksize)
 		self.last_ids_crawled = []
-		log.info("creating spider with peers: %s", peers)
 		self.nearest.push(peers)
+
+		log.info("Node %s creating spider with %i peers", str(self.node), len(peers))
 
 	async def _find(self, rpcmethod: asyncio.Future) -> asyncio.Future:
 		"""
 		Make a either a call_find_value or call_find_node rpc to our nearest
-		neighbors in attempt to find some peer
+		neighbors in attempt to find some node
 
 		Parameters
 		-----------
@@ -71,7 +72,7 @@ class SpiderCrawl:
 			asyncio.Future:
 				_nodes_found callback, which should be overloaded in sub-classes
 		"""
-		log.info("crawling network with nearest: %s", str(tuple(self.nearest)))
+		log.info("Node %s making find with %s on nearest: %s", str(self.node), rpcmethod.__name__, str(tuple(self.nearest)))
 		count = self.alpha
 		if self.nearest.get_ids() == self.last_ids_crawled:
 			count = len(self.nearest)
@@ -79,7 +80,7 @@ class SpiderCrawl:
 
 		dicts = {}
 		for peer in self.nearest.get_uncontacted()[:count]:
-			dicts[peer.id] = rpcmethod(peer, self.node)
+			dicts[peer.digest_id] = rpcmethod(peer, self.node)
 			self.nearest.mark_contacted(peer)
 		found = await gather_dict(dicts)
 		return await self._nodes_found(found)
@@ -156,7 +157,7 @@ class ValueSpiderCrawl(SpiderCrawl):
 
 		Returns
 		-------
-			Optional[Union[Callback[[Any], Any], Callback[[Any], Any]]
+			Optional[asyncio.Future]
 				Which can be either:
 					(1) a recursive call to _find if we have more searching to do
 					(2) None, if we've exhausted our search without finding our key
@@ -203,12 +204,11 @@ class ValueSpiderCrawl(SpiderCrawl):
 		# or from have_contacted_all
 		return await self.find()
 
-	async def _handle_found_values(self, values):
+	async def _handle_found_values(self, values: List[Dict[str, Any]]):
 		"""
-		We got some values!  Exciting.  But let's make sure
-		they're all the same or freak out a little bit.  Also,
-		make sure we tell the nearest node that *didn't* have
-		the value to store it.
+		We got some values!  Exciting.  But let's make sure they're all the 
+		same or freak out a little bit.  Also, make sure we tell the nearest 
+		node that *didn't* have the value to store it.
 
 		Basically this method is responsible for caching found values closer
 		to the current node so as to increase the performance/lookup of
@@ -226,12 +226,13 @@ class ValueSpiderCrawl(SpiderCrawl):
 		"""
 		value_counts = Counter(values)
 		if len(value_counts) != 1:
-			log.warning("Got multiple values for key %i: %s", self.node.long_id, str(values))
+			log.warning("Node %s multiple values for %s", str(self.node), str(values))
 		value = value_counts.most_common(1)[0][0]
 
 		peer = self.nearest_without_value.popleft()
 		if peer:
-			await self.protocol.call_store(peer, self.node.id, value)
+			log.debug("Node %s asking nearest node %i to store %s", str(self.node), peer.long_id, str(value))
+			await self.protocol.call_store(peer, self.node.digest_id, value)
 		return value
 
 
@@ -273,11 +274,13 @@ class NodeSpiderCrawl(SpiderCrawl):
 		for peerid, response in responses.items():
 			response = RPCFindResponse(response)
 			if not response.did_happen():
+				log.debug("Node %s encountered empty response, removing...", str(self.node))
 				toremove.append(peerid)
 			else:
 				self.nearest.push(response.get_node_list())
 		self.nearest.remove(toremove)
 
 		if self.nearest.have_contacted_all():
+			log.debug("Node %s has contacted all nearest nodes")
 			return list(self.nearest)
 		return await self.find()
