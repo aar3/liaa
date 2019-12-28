@@ -23,3 +23,4 @@
 - [enhancement] add coveralls support - https://coveralls.io
 - [enhancement] add logging
    - distinguish between Node, Peer, and Resource
+- [enhancement] add disk storage implementation

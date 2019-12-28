@@ -9,3 +9,4 @@ class TestConfig:
 		assert CONFIG.alpha == 3
 		assert CONFIG.ksize == 20
 		assert CONFIG.interface == "0.0.0.0"
+	
