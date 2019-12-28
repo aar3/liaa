@@ -272,8 +272,6 @@ class Server:
 
 		# if this node is close too, then store here as well
 		biggest = max([n.distance_to(node) for n in nodes])
-		# FIXME: should just store resource and have key/value logic set at
-		# storage module level (not at network module level)
 		if self.node.distance_to(node) < biggest:
 			self.storage[node.digest_id] = node.value
 		results = [self.protocol.call_store(n, node.digest_id, node.value) for n in nodes]
