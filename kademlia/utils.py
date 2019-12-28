@@ -244,6 +244,7 @@ class ArgsParser:
 	def __contains__(self, key: str) -> bool:
 		return key in self._data
 
+	# pylint: disable=no-self-use
 	def is_help_opt(self, args: List[str]):
 		return len(args) == 1 and "-h" in args or "--help" in args
 

@@ -21,10 +21,9 @@ addons:
 
 jobs:
     include:
+      - stage: "Run pylint"
+        script: make lint
       - stage: "Run test suite"
-        script: make ci-test
-        env:
-          - WORKDIR=/home/travis/build/ralston3/kademlia
-          - APPDIR=${WORKDIR}/kademlia
+        script: make test
         after_success:
             - codecov

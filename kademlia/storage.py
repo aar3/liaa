@@ -5,6 +5,7 @@ import operator
 import logging
 import datetime as dt
 import pickle
+import functools
 from collections import OrderedDict
 from abc import abstractmethod, ABC
 from typing import List, Optional, Tuple
@@ -14,6 +15,18 @@ from kademlia.utils import int_to_digest
 from kademlia.node import NodeType, Node
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+
+
+def pre_prune():
+	def wrapper(func):
+		@functools.wraps(func)
+		def _pre_prune(*args):
+			log.debug("%s pruning items...", args[0].node)
+			args[0].prune()
+			return func(*args)
+		return _pre_prune
+	return wrapper
 
 
 class IStorage(ABC):
@@ -104,10 +117,11 @@ class EphemeralStorage(IStorage):
 		return zip(ikeys, ibirthday, ivalues)
 
 	def __iter__(self):
-		self.prune()
 		ikeys = self.data.keys()
 		ivalues = map(operator.itemgetter(1), self.data.values())
 		return zip(ikeys, ivalues)
+
+
 
 
 class DiskStorage(IStorage):
@@ -133,28 +147,31 @@ class DiskStorage(IStorage):
 		for key, _ in self.iter_older_than(self.ttl):
 			self.remove(key)
 
+	@pre_prune()
 	def set(self, node: "Node"):
 		if node in self:
 			self.remove(node)
 		self.persist_data(node)
-		self.prune()
 
+	@pre_prune()
 	def get(self, key: int, default=None) -> "Node":
-		self.prune()
 		if key in self:
-			return Node(digest_id=int_to_digest(key), type=NodeType.Resource, value=self.load_data(key))
+			# pylint: disable=bad-continuation
+			return Node(digest_id=int_to_digest(key),
+							type=NodeType.Resource,
+							value=self.load_data(key))
 		return default
 
 	def contents(self) -> List[str]:
 		return os.listdir(self.dir)
 
-	def remove(self, node: "Node") -> None:
+	def remove(self, key: int) -> None:
 		try:
-			fname = self.dir + "/" + str(node.key)
-			log.debug("%s removing resource %s", self.node, node)
+			fname = self.dir + "/" + str(key)
+			log.debug("%s removing resource %i", self.node, key)
 			os.remove(fname)
 		except FileNotFoundError as err:
-			log.error("%s could not remove key %s: %s", self.node, node, str(err))
+			log.error("%s could not remove key %i: %s", self.node, key, str(err))
 
 	def persist_data(self, node: "Node") -> None:
 		fname = os.path.join(self.dir, str(node.long_id))
@@ -179,25 +196,27 @@ class DiskStorage(IStorage):
 			statbuff = os.stat(path)
 			diff = dt.datetime.fromtimestamp(time.time()) - dt.datetime.fromtimestamp(statbuff.st_mtime)
 			return name, diff.seconds
-		return map(time_delta, self.contents())
+		return list(map(time_delta, self.contents()))
 
 	def iter_older_than(self, seconds_old: int):
 		to_republish = filter(lambda t: t[1] > seconds_old, self.content_stats())
-		repub_keys = map(operator.itemgetter(0), to_republish)
+		repub_keys = list(map(operator.itemgetter(0), to_republish))
 		repub_data = [self.load_data(k) for k in repub_keys]
 		return zip(repub_keys, repub_data)
 
+	@pre_prune()
 	def __iter__(self):
-		self.prune()
 		ikeys = self.contents()
 		ivalues = [self.load_data(k) for k in ikeys]
 		return zip(ikeys, ivalues)
 
 	def __contains__(self, key: int) -> bool:
-		print(key)
-		print(self.contents)
 		return str(key) in self.contents()
 
 	def __repr__(self):
 		self.prune()
 		return repr(self.contents())
+
+	@pre_prune()
+	def __len__(self):
+		return len(self.contents())

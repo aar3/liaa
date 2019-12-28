@@ -15,10 +15,11 @@ from kademlia.rpc import (
 	Header
 )
 from kademlia.network import Server
-from kademlia.node import Node
+from kademlia.node import Node, NodeType
 from kademlia.protocol import KademliaProtocol
 from kademlia.routing import RoutingTable, KBucket
 from kademlia.storage import EphemeralStorage
+from kademlia.utils import rand_digest_id, rand_str
 
 
 @pytest.yield_fixture
@@ -50,10 +51,25 @@ def mknode():
 @pytest.fixture()
 def mkdgram():
 	def _mkdgram(header=Header.Request, msg_id=os.urandom(32), data=('funcname', 123)):
+		"""
+		Create a datagram
+		"""
 		buff = header + hashlib.sha1(msg_id).digest() + umsgpack.packb(data)
 		return Datagram(buff)
 	return _mkdgram
 
+
+@pytest.fixture()
+def mkrsrc():
+	def _mkrsrc():
+		"""
+		Create a fake resource
+		"""
+		# pylint: disable=bad-continuation
+		return Node(digest_id=rand_digest_id(),
+						type=NodeType.Resource,
+						value=rand_str().encode())
+	return _mkrsrc
 
 @pytest.fixture()
 def mkqueue():
