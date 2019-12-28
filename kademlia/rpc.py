@@ -245,7 +245,9 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			log.warning("received unknown message %s from %s; ignoring", *msgargs)
 			return
 
-		log.debug("received response %s for message id %s from %s", dgram.data, dgram.id, join_addr(msgargs))
+		# pylint: disable=bad-continuation
+		log.debug("received response %s for message id %s from %s",
+					dgram.data, dgram.id, join_addr(msgargs[1]))
 		if not self._queue.dequeue_fut(dgram):
 			log.warning("could not mark datagram %s as received", dgram.id)
 
@@ -270,9 +272,6 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		# send 'ping' as the function name, at which point, we concat 'rpc_' onto
 		# the function name so that when we call getattr(self, funcname) we will
 		# get the rpc version of the fucname
-
-		# FIXME: explore if there is a more explicit, non-hackish way to execute
-		# these rpc methods
 
 		func = getattr(self, "rpc_%s" % dgram.funcname, None)
 		if func is None or not callable(func):
@@ -327,7 +326,10 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			if len(data) > MAX_PAYLOAD_SIZE:
 				raise MalformedMessage("Total length of function name and arguments cannot exceed 8K")
 			txdata = Header.Request + msg_id + data
-			log.debug("executing rpc %s on %s (msgid %s)", name, join_addr(address), base64.b64encode(msg_id))
+
+			# pylint: disable=bad-continuation
+			log.debug("executing rpc %s on %s (msgid %s)",
+						name, join_addr(address), base64.b64encode(msg_id))
 			self.transport.sendto(txdata, address)
 
 			# we assume python version >= 3.7

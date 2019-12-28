@@ -9,7 +9,9 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 class Config:
 	def __init__(self):
 		self.data = None
-		with open(f"{os.environ['APPDIR']}/config.json", "r") as lines:
+		self.workdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+		self.appdir = os.path.join(self.workdir, "kademlia")
+		with open(f"{self.appdir}/config.json", "r") as lines:
 			self.data = json.load(lines)
 
 	@property
@@ -33,7 +35,7 @@ class Config:
 		return file
 
 	def __getattr__(self, name):
-		exceptions = ["persist_dir", "state_file"]
+		exceptions = ["persist_dir", "state_file", "workdir", "appdir"]
 		if name in exceptions:
 			return getattr(super(), name)
 		return self.data.get(name)

@@ -1,11 +1,11 @@
 import pickle
 import asyncio
 import logging
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Optional
 
 from kademlia.protocol import KademliaProtocol
-from kademlia.utils import digest, rand_digest_id
-from kademlia.storage import EphemeralStorage
+from kademlia.utils import rand_digest_id, int_to_digest
+from kademlia.storage import StorageIface
 from kademlia.node import Node, NodeType
 from kademlia.crawling import ValueSpiderCrawl, NodeSpiderCrawl
 from kademlia.config import CONFIG
@@ -21,11 +21,9 @@ class Server:
 
 	# pylint: disable=bad-continuation
 	def __init__(self,
-			ksize: int = CONFIG.ksize,
-			alpha: int = CONFIG.alpha,
-			node_id: Optional[int] = None,
-			storage: Optional["EphemeralStorage"] = None
-	):
+		node_id: Optional[bytes] = None,
+		ksize: int = CONFIG.ksize,
+		alpha: int = CONFIG.alpha):
 		"""
 		High level view of a node instance.  This is the object that should be
 		created to start listening as an active node on the network.
@@ -33,19 +31,19 @@ class Server:
 
 		Parameters
 		----------
-			ksize: int
-				The k parameter from the paper
-			alpha: int
-				The alpha parameter from the paper
-			node_id: Optional[int]
+			node_id: Optional[bytes]
 				The id for this node on the network.
-			storage: Optional[EphemeralStorage]
-				A storage interface
+			ksize: int
+				The k parameter from the paper (default from config)
+			alpha: int
+				The alpha parameter from the paper (default from config)
 		"""
+		self.node = Node(node_id if node_id else rand_digest_id())
+		log.info("Using storage interface: %s", StorageIface.__name__)
+		self.storage = StorageIface(self.node)
 		self.ksize = ksize
 		self.alpha = alpha
-		self.storage = storage or EphemeralStorage()
-		self.node = Node(node_id or rand_digest_id())
+
 		self.transport = None
 		self.protocol = None
 		self.refresh_loop = None
@@ -95,7 +93,7 @@ class Server:
 
 		self.node.ip = interface
 		self.node.port = port
-		log.info("Node %s listening at %s:%i", self.node, interface, port)
+		log.info("Peer %s listening at %s:%i", self.node, interface, port)
 		self.transport, self.protocol = await listen
 		# finally, schedule refreshing table
 		self.refresh_table()
@@ -123,7 +121,7 @@ class Server:
 		for digest_id in self.protocol.get_refresh_ids():
 			node = Node(digest_id)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
-			log.debug("Node %s refreshing routing table on %i nearest", self.node, len(nearest))
+			log.debug("Peer %s refreshing routing table on %i nearest", self.node, len(nearest))
 			spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 			results.append(spider.find())
 
@@ -131,9 +129,9 @@ class Server:
 		await asyncio.gather(*results)
 
 		# now republish keys older than one hour
-		for dkey, value in self.storage.iter_older_than(3600):
-			node = Node(dkey, type=NodeType.Resource, value=value)
-			log.debug("Node %s republishing resource node %i", self.node, str(node))
+		for int_key, value in self.storage.iter_older_than(3600):
+			node = Node(int_to_digest(int_key), type=NodeType.Resource, value=value)
+			log.debug("Peer %s republishing resource node %s", self.node, str(node))
 			await self.set_digest(node)
 
 	def bootstrappable_neighbors(self) -> List["Node"]:
@@ -170,7 +168,7 @@ class Server:
 				scheduled callback for a NodeSpiderCrawl to continue crawling
 				network in order to find peers for self.node
 		"""
-		log.debug("Node %s attempting to bootstrap node with %i initial contacts", self.node, len(addrs))
+		log.debug("Peer %s attempting to bootstrap with contacts: %s", self.node, addrs)
 		cos = list(map(self.bootstrap_node, addrs))
 		gathered = await asyncio.gather(*cos)
 		nodes = [node for node in gathered if node is not None]
@@ -196,14 +194,14 @@ class Server:
 		result = await self.protocol.ping(addr, self.node.digest_id)
 		return Node(result[1], addr[0], addr[1]) if result[0] else None
 
-	async def get(self, key: Union[str, bytes]) -> asyncio.Future:
+	async def get(self, key: int) -> asyncio.Future:
 		"""
 		Crawl the current node's known network in order to find a given key. This
 		is the interface for grabbing a key from the network
 
 		Parameters
 		----------
-			key: Union[str, bytes]
+			key: int
 				Key to find in network
 
 		Returns
@@ -212,16 +210,21 @@ class Server:
 				A recursive call to ValueSpiderCrawl.find which will terminate
 				either when the value is find or the search is exhausted
 		"""
-		log.info("Node %s looking up key %s", self.node, key)
-		dkey = digest(key)
+		log.info("Peer %s looking up key %s", self.node, key)
+		dkey = int_to_digest(key)
+
 		# if this node has it, return it
-		if self.storage.get(dkey) is not None:
-			return self.storage[dkey]
+		result = self.storage.get(dkey.hex())
+		if result is not None:
+			return result
+
 		node = Node(dkey, type=NodeType.Resource)
 		nearest = self.protocol.router.find_neighbors(node)
+
 		if not nearest:
 			log.warning("There are no known neighbors to get key %s", str(node))
 			return None
+
 		spider = ValueSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 		return await spider.find()
 
@@ -272,10 +275,8 @@ class Server:
 
 		# if this node is close too, then store here as well
 		biggest = max([n.distance_to(node) for n in nodes])
-		# FIXME: should just store resource and have key/value logic set at
-		# storage module level (not at network module level)
 		if self.node.distance_to(node) < biggest:
-			self.storage[node.digest_id] = node.value
+			self.storage.set(node)
 		results = [self.protocol.call_store(n, node.digest_id, node.value) for n in nodes]
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
@@ -299,7 +300,7 @@ class Server:
 			'neighbors': self.bootstrappable_neighbors()
 		}
 		if not data['neighbors']:
-			log.warning("Node %s has no known neighbors, so not writing to cache.", self.node)
+			log.warning("Peer %s has no known neighbors, so not writing to cache.", self.node)
 			return
 		with open(fname, 'wb') as file:
 			pickle.dump(data, file)

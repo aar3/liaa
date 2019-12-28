@@ -46,12 +46,6 @@ def main():
 		args = "p:a:"
 		long_args = ["--port", "--addr="]
 
-		# if we don't have all the necessary args to start the example, or if
-		# we get a 'help' arg, just show usage and exit
-		if parser.is_help_opt(sys.argv[1:]) or not parser.has_proper_opts():
-			print(network_example_usage())
-			sys.exit(1)
-
 		# use getopt to parse our args and add them to our parser
 		opts, args = getopt.getopt(sys.argv[1:], args, long_args)
 		parser.add_many(opts)
@@ -63,6 +57,13 @@ def main():
 		log.error("GetoptError: %s", err)
 		print(network_example_usage())
 		sys.exit(1)
+
+	# if we don't have all the necessary args to start the example, or if
+	# we get a 'help' arg, just show usage and exit
+	if parser.has_help_opt() or not parser.has_proper_opts():
+		print(network_example_usage())
+		sys.exit(1)
+
 
 	# run our server's listener using the port we passed in
 	loop.run_until_complete(server.listen(int(parser.get("-p", "--port"))))
@@ -85,8 +86,13 @@ def main():
 		loop.run_until_complete(asyncio.sleep(5))
 
 	# we should shutdown gracefully
-	server.stop()
-	loop.close()
+	try:
+		loop.run_forever()
+	except KeyboardInterrupt:
+		pass
+	finally:
+		server.stop()
+		loop.close()
 
 if __name__ == "__main__":
 

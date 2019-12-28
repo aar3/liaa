@@ -1,5 +1,4 @@
 import sys
-import hashlib
 import operator
 import random
 import string
@@ -66,6 +65,10 @@ def rand_digest_id():
 	return int_to_digest(num)
 
 
+def int_to_hex(num: int) -> str:
+	return int_to_digest(num).hex()
+
+
 async def gather_dict(dic: Dict[str, Any]) -> Dict[str, Any]:
 	"""
 	Execute a list of coroutines and return the results
@@ -86,23 +89,23 @@ async def gather_dict(dic: Dict[str, Any]) -> Dict[str, Any]:
 	return dict(zip(dic.keys(), results))
 
 
-def digest(arr: Union[str, bytes]) -> bytes:
-	"""
-	Return the SHA1 hash of a given string/byte array
+# def digest(arr: Union[str, bytes]) -> bytes:
+# 	"""
+# 	Return the SHA1 hash of a given string/byte array
 
-	Parameters
-	----------
-		arr: Union[str, bytes]
-			Byte/string array to be hashed
+# 	Parameters
+# 	----------
+# 		arr: Union[str, bytes]
+# 			Byte/string array to be hashed
 
-	Returns
-	-------
-		bytes:
-			Hash of given byte/string array
-	"""
-	if not isinstance(arr, bytes):
-		arr = str(arr).encode('utf8')
-	return hashlib.sha1(arr).digest()
+# 	Returns
+# 	-------
+# 		bytes:
+# 			Hash of given byte/string array
+# 	"""
+# 	if not isinstance(arr, bytes):
+# 		arr = str(arr).encode('utf8')
+# 	return hashlib.sha1(arr).digest()
 
 
 def digest_to_int(byte_arr: bytes) -> int:
@@ -152,7 +155,11 @@ def bytes_to_bit_string(arr: bytes) -> str:
 	return "".join(bits)
 
 
-def hex_to_int(hexval: bytes, base=16) -> int:
+def hex_to_int_digest(hexval: str) -> bytes:
+	return int_to_digest(hex_to_int(hexval))
+
+
+def hex_to_int(hexval: bytes, base: int = 16) -> int:
 	"""
 	Convert given hex to a base-16 integer
 
@@ -244,8 +251,9 @@ class ArgsParser:
 	def __contains__(self, key: str) -> bool:
 		return key in self._data
 
-	def is_help_opt(self, args: List[str]):
-		return len(args) == 1 and "-h" in args or "--help" in args
+	# pylint: disable=no-self-use
+	def has_help_opt(self):
+		return len(self._data) == 1 and "-h" in self._data or "--help" in self._data
 
 	def has_proper_opts(self):
 		# pylint: disable=bad-continuation

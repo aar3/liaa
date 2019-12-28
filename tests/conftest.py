@@ -15,10 +15,11 @@ from kademlia.rpc import (
 	Header
 )
 from kademlia.network import Server
-from kademlia.node import Node
+from kademlia.node import Node, NodeType
 from kademlia.protocol import KademliaProtocol
 from kademlia.routing import RoutingTable, KBucket
-from kademlia.storage import EphemeralStorage
+from kademlia.storage import StorageIface
+from kademlia.utils import rand_digest_id, rand_str
 
 
 @pytest.yield_fixture
@@ -50,10 +51,27 @@ def mknode():
 @pytest.fixture()
 def mkdgram():
 	def _mkdgram(header=Header.Request, msg_id=os.urandom(32), data=('funcname', 123)):
+		"""
+		Create a datagram
+		"""
 		buff = header + hashlib.sha1(msg_id).digest() + umsgpack.packb(data)
 		return Datagram(buff)
 	return _mkdgram
 
+
+@pytest.fixture()
+def mkrsrc():
+	def _mkrsrc(key=None, value=None):
+		"""
+		Create a fake resource
+		"""
+		key = key or rand_digest_id()
+		value = value or rand_str()
+		# pylint: disable=bad-continuation
+		return Node(digest_id=key,
+						type=NodeType.Resource,
+						value=value)
+	return _mkrsrc
 
 @pytest.fixture()
 def mkqueue():
@@ -83,30 +101,34 @@ def mkbucket():
 
 # pylint: disable=too-few-public-methods
 class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
-	def __init__(self, source_id, storage=EphemeralStorage(), ksize=20):
+	def __init__(self, source_id, storage, ksize=20):
 		super(FakeProtocol, self).__init__(source_id, storage=storage, ksize=ksize)
 		self.router = RoutingTable(self, ksize, Node(source_id))
 		self.source_id = source_id
+
 
 @pytest.fixture()
 def fake_proto(mknode):
 	def _fake_proto(node=None):
 		node = node or mknode()
-		return FakeProtocol(node.digest_id)
+		return FakeProtocol(node.digest_id, StorageIface(node), ksize=20)
 	return _fake_proto
 
 
 # pylint: disable=too-few-public-methods
 class FakeServer:
-	def __init__(self, node_id):
-		self.id = node_id  # pylint: disable=invalid-name
-		self.protocol = FakeProtocol(self.id)
+	def __init__(self, node):
+		self.node_id = node.digest_id
+		self.storage = StorageIface(node)
+		self.ksize = 20
+		self.alpha = 3
+		self.protocol = FakeProtocol(self.node_id, self.storage, self.ksize)
 		self.router = self.protocol.router
 
 
 @pytest.fixture
 def fake_server(mknode):
-	return FakeServer(mknode().digest_id)
+	return FakeServer(mknode())
 
 
 class Sandbox:
