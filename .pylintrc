@@ -89,6 +89,7 @@ disable=print-statement,
         delslice-method,
         getslice-method,
         setslice-method,
+        abstract-class-instantiated,
         no-absolute-import,
         old-division,
         dict-iter-method,
@@ -293,7 +294,7 @@ indent-after-paren=4
 
 # String used as indentation unit. This is usually "    " (4 spaces) or "\t" (1
 # tab).
-indent-string='    '
+indent-string='\t'
 
 # Maximum number of characters on a single line.
 max-line-length=100

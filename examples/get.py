@@ -5,8 +5,8 @@ import sys
 from kademlia.network import Server
 
 if len(sys.argv) != 4:
-    print("Usage: python get.py <bootstrap node> <bootstrap port> <key>")
-    sys.exit(1)
+	print("Usage: python get.py <bootstrap node> <bootstrap port> <key>")
+	sys.exit(1)
 
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

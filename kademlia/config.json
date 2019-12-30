@@ -1,0 +1,9 @@
+{
+   "interface": "0.0.0.0",
+   "port": 9999,
+   "ksize": 20,
+   "alpha": 3,
+   "persist_dir": ".kademlia",
+   "state_file": ".kademlia/state.dat",
+   "storage": "disk"
+}

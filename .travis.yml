@@ -1,9 +1,29 @@
 language: python
 python:
-  - "3.5"
-  - "3.6"
   - "3.7"
 dist:
   - xenial
-install: pip install . && pip install -r dev-requirements.txt
-script: pytest
+
+services:
+    - docker
+
+before_install:
+  - sudo apt-get update
+  - sudo apt-get -y install gcc-4.8
+
+install:
+    - pip install --upgrade -r .requirements.lock --trusted-host pypi.python.org
+
+addons:
+  apt:
+    packages:
+      cmake
+
+jobs:
+    include:
+      - stage: "Run pylint"
+        script: make lint
+      - stage: "Run test suite"
+        script: make test
+        after_success:
+            - codecov
