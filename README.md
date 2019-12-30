@@ -2,8 +2,10 @@
 [!This is a fork of bmuller's original repo!](https://github.com/bmuller/kademlia)
 
 [![Build Status](https://secure.travis-ci.org/ralston3/kademlia.png?branch=master)](https://travis-ci.org/ralston3/kademlia)
+[![Python version](https://img.shields.io/pypi/pyversions/kademlia)](https://pypi.org/project/kademlia/)
 [![Docs Status](https://readthedocs.org/projects/kademlia/badge/?version=latest)](http://kademlia.readthedocs.org)
-[![Coverage Status](https://coveralls.io/repos/github/ralston3/kademlia/badge.svg?branch=master)](https://coveralls.io/github/ralston3/kademlia?branch=master)
+[![Codecov](https://img.shields.io/codecov/c/github/ralston3/kademlia)](https://coveralls.io/github/ralston3/kademlia?branch=master)
+![Repo Size](https://img.shields.io/github/repo-size/ralston3/kademlia)
 
 **Documentation can be found at [kademlia.readthedocs.org](http://kademlia.readthedocs.org/).**
 
