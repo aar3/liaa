@@ -12,7 +12,7 @@ before_install:
   - sudo apt-get -y install gcc-4.8
 
 install:
-    - pip install --upgrade -r .requirements.lock --trusted-host pypi.python.org
+    - python -m pip install --upgrade -r .requirements.lock --trusted-host pypi.python.org
 
 addons:
   apt:
