@@ -59,8 +59,7 @@ class TestKademliaProtocol:
 	# pylint: disable=no-self-use
 	def test_can_init_protocol(self, mknode):
 		node = mknode(intid=1)
-		proto = KademliaProtocol(node, storage=None, ksize=20)
-		proto.storage = EphemeralStorage()
+		proto = KademliaProtocol(node, storage=EphemeralStorage(node), ksize=20)
 		assert isinstance(proto, KademliaProtocol)
 
 	def test_can_refresh_ids(self, mknode, mkbucket, fake_proto):

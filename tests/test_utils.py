@@ -1,31 +1,32 @@
-import hashlib
 import asyncio
 
 # pylint: disable=bad-continuation
 from kademlia.utils import (
-	digest,
+	# digest,
 	shared_prefix,
 	bytes_to_bit_string,
 	hex_to_int,
+	ArgsParser,
 	check_dht_value_type,
 	gather_dict,
 	join_addr,
+	hex_to_int_digest,
 	split_addr,
+	digest_to_int,
 	rand_str,
 	rand_int_id,
-	digest_to_int,
 	int_to_digest
 )
 
 
 class TestUtils:
 	# pylint: disable=no-self-use
-	def test_digest(self):
-		dig = hashlib.sha1(b'1').digest()
-		assert dig == digest(1)
+	# def test_digest(self):
+	# 	dig = hashlib.sha1(b'1').digest()
+	# 	assert dig == digest(1)
 
-		dig = hashlib.sha1(b'another').digest()
-		assert dig == digest('another')
+	# 	dig = hashlib.sha1(b'another').digest()
+	# 	assert dig == digest('another')
 
 	def test_shared_prefix(self):
 		args = ['prefix', 'prefixasdf', 'prefix', 'prefixxxx']
@@ -119,3 +120,34 @@ class TestUtils:
 		num = 10
 		byte_arr = num.to_bytes((num.bit_length() // 8) + 1, byteorder='big')
 		assert byte_arr == int_to_digest(num)
+
+	def digest_to_int(self):
+		dgst = b'\x00\x00\x00\n'
+		assert dgst == digest_to_int(10)
+
+	def test_hex_to_int_digest(self):
+		num = 10
+		hexval = int_to_digest(num).hex()
+		assert hex_to_int_digest(hexval) == int_to_digest(num)
+
+class TestArgsParser:
+	# pylint: disable=no-self-use
+	def test_can_set_and_get_via_primary_flag(self):
+		parser = ArgsParser()
+		opts = [("-f", "foo"), ("--bar", "bar"), ("-z", "1")]
+		parser.add_many(opts)
+
+		assert parser.get("-f", "--foo") == "foo"
+
+	def test_can_set_and_get_via_secondary_flag(self):
+		parser = ArgsParser()
+		opts = [("--foo", "foo"), ("--bar", "bar"), ("-z", "1")]
+		parser.add_many(opts)
+
+		assert parser.get("-f", "--foo") == "foo"
+
+	def test_has_help_opt_is_true(self):
+		parser = ArgsParser()
+		opts = [("-h", "")]
+		parser.add_many(opts)
+		assert parser.has_help_opt()

@@ -24,3 +24,7 @@
 - [enhancement] add logging
    - distinguish between Node, Peer, and Resource
 - [enhancement] add disk storage implementation
+- [refactor] refactor storage implementation for cohesiveness
+   - use StorageIface to simplify storage setting throughout app
+   - use IStorage ABC as a true base class for all storage implementations
+   - use hex keys to storage resources, and keep long_id non-storage references

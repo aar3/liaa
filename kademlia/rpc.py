@@ -247,7 +247,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 
 		# pylint: disable=bad-continuation
 		log.debug("received response %s for message id %s from %s",
-					dgram.data, dgram.id, join_addr(msgargs))
+					dgram.data, dgram.id, join_addr(msgargs[1]))
 		if not self._queue.dequeue_fut(dgram):
 			log.warning("could not mark datagram %s as received", dgram.id)
 

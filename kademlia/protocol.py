@@ -7,7 +7,7 @@ from typing import *
 from kademlia.node import Node, NodeType
 from kademlia.routing import RoutingTable
 from kademlia.rpc import RPCProtocol
-from kademlia.utils import hex_to_int, join_addr
+from kademlia.utils import hex_to_int, join_addr, hex_to_int_digest
 
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -31,7 +31,7 @@ class KademliaProtocol(RPCProtocol):
 		----------
 			source_node: Node
 				Our node (representing the current machine)
-			storage: EphemeralStorage
+			storage: IStorage
 				Storage interface
 			ksize: int
 				Size of kbuckets
@@ -95,7 +95,7 @@ class KademliaProtocol(RPCProtocol):
 		self.welcome_if_new(source)
 		return self.source_node.digest_id
 
-	def rpc_store(self, sender: "Node", node_id: int, key: int, value: Any) -> bool:
+	def rpc_store(self, sender: "Node", node_id: bytes, key: bytes, value: Any) -> bool:
 		"""
 		Store data from a given sender
 
@@ -103,9 +103,9 @@ class KademliaProtocol(RPCProtocol):
 		----------
 			sender: Node
 				Node that is initiating/requesting store
-			node_id: int
+			node_id: bytes
 				ID of node that is initiating/requesting store
-			key: str
+			key: bytes
 				ID of resource to be stored
 			value: Any
 				Payload to be stored at `key`
@@ -118,7 +118,8 @@ class KademliaProtocol(RPCProtocol):
 		source = Node(node_id, sender[0], sender[1])
 		self.welcome_if_new(source)
 		log.debug("store request from %s, storing %iB at %s", join_addr(sender), len(value), key.hex())
-		self.storage[key] = value
+		resource = Node(key, type=NodeType.Resource, value=value)
+		self.storage.set(resource)
 		return True
 
 	def rpc_find_node(self,
@@ -291,16 +292,19 @@ class KademliaProtocol(RPCProtocol):
 
 		log.info("welcoming new node %s, adding to router", node)
 
-		for dkey, value in self.storage:
-			keynode = Node(dkey, type=NodeType.Resource, value=value)
+		for hexkey, value in self.storage:
+			keynode = Node(hex_to_int_digest(hexkey), type=NodeType.Resource, value=value)
 			neighbors = self.router.find_neighbors(keynode)
+
 			if neighbors:
 				furthest = neighbors[-1].distance_to(keynode)
 				is_closer_than_furthest = node.distance_to(keynode) < furthest
 				closest_distance_to_new = neighbors[0].distance_to(keynode)
 				curr_distance_to_new = self.source_node.distance_to(keynode) < closest_distance_to_new
+
 			if not neighbors or (is_closer_than_furthest and curr_distance_to_new):
-				asyncio.ensure_future(self.call_store(node, dkey, value))
+				asyncio.ensure_future(self.call_store(node, keynode.digest_id, value))
+
 		self.router.add_contact(node)
 
 	def handle_call_response(self, result: Any, node: "Node"):

@@ -7,31 +7,40 @@ from kademlia.config import CONFIG
 
 class TestEphemeralStorage:
 	# pylint: disable=no-self-use
-	def test__setitem__works_ok(self):
-		storage = EphemeralStorage(10)
-		storage['one'] = 'two'
-		assert storage['one'] == 'two'
+	def test_can_instantiate_storage(self, mknode):
+		storage = EphemeralStorage(mknode(), 10)
+		assert isinstance(storage, EphemeralStorage)
 
-	def test_resource_expires_per_expiry(self):
-		# Expiry time of 0 should force the prune to make all items stale
-		# immediately
-		storage = EphemeralStorage(0)
-		storage['one'] = 'two'
-		assert storage.get('one') is None
+	def test_can_set_and_get(self, mknode, mkrsrc):
+		storage = EphemeralStorage(mknode, 10)
+		resource = mkrsrc(key=b"one", value=b"two")
+		storage.set(resource)
 
-	def test_iter(self):
-		storage = EphemeralStorage(10)
-		storage['one'] = 'two'
-		for key, value in storage:
-			assert key == 'one'
-			assert value == 'two'
+		_, value = storage.get(resource.hex)
+		assert  value == b"two"
 
-	def test_iter_older_than(self):
-		storage = EphemeralStorage(10)
-		storage['one'] = 'two'
+	def test_resource_expires_per_expiry(self, mknode, mkrsrc):
+		# Expiry time of 0 should force the prune to make all items stale immediately
+		storage = EphemeralStorage(mknode(), 0)
+		resource = mkrsrc(key=b"one", value=b"two")
+		storage.set(resource)
+		assert not storage.get(resource.hex)
+
+	def test_iter(self, mknode, mkrsrc):
+		storage = EphemeralStorage(mknode(), 0)
+		resource = mkrsrc(key=b"one", value=b"two")
+		storage.set(resource)
+		for key, (_, value) in storage:
+			assert key == resource.hex
+			assert value == resource.value
+
+	def test_iter_older_than(self, mknode, mkrsrc):
+		storage = EphemeralStorage(mknode(), 0)
+		resource = mkrsrc(key=b"one", value=b"two")
+		storage.set(resource)
 		for key, value in storage.iter_older_than(0):
-			assert key == 'one'
-			assert value == 'two'
+			assert key == resource.hex
+			assert value == resource.value
 
 
 class TestDiskStorage:
@@ -52,7 +61,7 @@ class TestDiskStorage:
 		storage.set(resource)
 
 		assert len(storage) == len(storage.contents()) == 1
-		assert storage.contents()[0] == str(resource.long_id)
+		assert storage.contents()[0] == str(resource.hex)
 
 	def test_remove_works_ok(self, mknode, mkrsrc):
 		node = mknode()
@@ -63,7 +72,7 @@ class TestDiskStorage:
 
 		assert len(storage) == 1
 
-		storage.remove(resource.long_id)
+		storage.remove(resource.hex)
 		assert len(storage) == 0
 
 	def test_load_data_returns_proper_payload(self, mknode, mkrsrc):
@@ -73,7 +82,8 @@ class TestDiskStorage:
 		resource = mkrsrc()
 		storage.set(resource)
 
-		data = storage.load_data(resource.long_id)
+		# pylint: disable=protected-access
+		data = storage._load_data(resource.hex)
 		assert resource.value == data
 
 	def test_persist_dir_exists(self, mknode):
@@ -91,7 +101,7 @@ class TestDiskStorage:
 
 		storage.set(resource)
 
-		result = storage.get(resource.long_id)
+		result = storage.get(resource.hex)
 		assert result == resource
 
 
@@ -119,5 +129,5 @@ class TestDiskStorage:
 		assert len(storage) == 1
 
 		for key, value in storage:
-			assert int(key) == r2.long_id
+			assert key == r2.hex
 			assert value == r2.value
