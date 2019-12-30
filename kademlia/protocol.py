@@ -7,7 +7,7 @@ from typing import *
 from kademlia.node import Node, NodeType
 from kademlia.routing import RoutingTable
 from kademlia.rpc import RPCProtocol
-from kademlia.utils import hex_to_int, join_addr, hex_to_int_digest
+from kademlia.utils import join_addr
 
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -91,7 +91,7 @@ class KademliaProtocol(RPCProtocol):
 				ID of requesting node
 		"""
 		source = Node(node_id, sender[0], sender[1])
-		log.debug("ping request from %s", join_addr(sender))
+		log.debug("%s got ping request from %s", self.source_node, join_addr(sender))
 		self.welcome_if_new(source)
 		return self.source_node.digest_id
 
@@ -117,7 +117,9 @@ class KademliaProtocol(RPCProtocol):
 		"""
 		source = Node(node_id, sender[0], sender[1])
 		self.welcome_if_new(source)
-		log.debug("store request from %s, storing %iB at %s", join_addr(sender), len(value), key.hex())
+		# pylint: disable=bad-continuation
+		log.debug("%s got store request from %s, storing %iB at %s",
+					self.source_node, join_addr(sender), len(value), key.hex())
 		resource = Node(key, type=NodeType.Resource, value=value)
 		self.storage.set(resource)
 		return True
@@ -144,8 +146,8 @@ class KademliaProtocol(RPCProtocol):
 			List[Tuple[int, str, int]]:
 				Addresses of closest neighbors in regards to resource `key`
 		"""
-		log.info("finding neighbors of %i in local table", hex_to_int(node_id.hex()))
 		source = Node(node_id, sender[0], sender[1])
+		log.info("%s finding neighbors of %s in local table", self.source_node, source)
 		self.welcome_if_new(source)
 		node = Node(key)
 		neighbors = self.router.find_neighbors(node, exclude=source)
@@ -273,7 +275,7 @@ class KademliaProtocol(RPCProtocol):
 
 	def welcome_if_new(self, node: "Node"):
 		"""
-		Given a new node, send it all the keys/values it should be storing,
+		Given a new node (Peer), send it all the keys/values it should be storing,
 		then add it to the routing table.
 
 		Process:
@@ -287,23 +289,22 @@ class KademliaProtocol(RPCProtocol):
 			node: Node
 				Node to add to routing table
 		"""
-		if not self.router.is_new_node(node):
+		if not self.router.is_new_node(node) or node.type == NodeType.Resource:
 			return
 
-		log.info("welcoming new node %s, adding to router", node)
+		log.info("%s welcoming new node %s", self.source_node, node)
 
-		for hexkey, value in self.storage:
-			keynode = Node(hex_to_int_digest(hexkey), type=NodeType.Resource, value=value)
-			neighbors = self.router.find_neighbors(keynode)
+		for inode in self.storage:
+			neighbors = self.router.find_neighbors(inode)
 
 			if neighbors:
-				furthest = neighbors[-1].distance_to(keynode)
-				is_closer_than_furthest = node.distance_to(keynode) < furthest
-				closest_distance_to_new = neighbors[0].distance_to(keynode)
-				curr_distance_to_new = self.source_node.distance_to(keynode) < closest_distance_to_new
+				furthest = neighbors[-1].distance_to(inode)
+				is_closer_than_furthest = node.distance_to(inode) < furthest
+				closest_distance_to_new = neighbors[0].distance_to(inode)
+				curr_distance_to_new = self.source_node.distance_to(inode) < closest_distance_to_new
 
 			if not neighbors or (is_closer_than_furthest and curr_distance_to_new):
-				asyncio.ensure_future(self.call_store(node, keynode.digest_id, value))
+				asyncio.ensure_future(self.call_store(node, inode.digest_id, inode.value))
 
 		self.router.add_contact(node)
 
@@ -325,10 +326,12 @@ class KademliaProtocol(RPCProtocol):
 				The result from our rpc method
 		"""
 		if not result[0]:
-			log.warning("no response from %s, removing from router", node)
+			# pylint: disable=bad-continuation
+			log.warning("%s got no response from %s, removing from router",
+							self.source_node, node)
 			self.router.remove_contact(node)
 			return result
 
-		log.info("handling successful response from %s", node)
+		log.info("%s handling successful response from %s", self.source_node, node)
 		self.welcome_if_new(node)
 		return result

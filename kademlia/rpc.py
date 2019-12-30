@@ -3,17 +3,16 @@ import base64
 import hashlib
 import logging
 import os
-from typing import Any, List, Dict, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 import umsgpack
 
-from kademlia.node import Node
+from kademlia.config import CONFIG
 from kademlia.exception import MalformedMessage
+from kademlia.node import Node
 from kademlia.utils import join_addr
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
-
-MAX_PAYLOAD_SIZE = 8192
 
 # pylint: disable=too-few-public-methods
 class Header:
@@ -23,18 +22,23 @@ class Header:
 
 class RPCMessageQueue:
 	def __init__(self):
-		self.items = {}
+		self.items: Dict[bytes, Tuple[asyncio.Future, asyncio.Handle]] = {}
 
-	def remove_item(self, msg_id):
+	def remove_item(self, msg_id: bytes) -> None:
 		del self.items[msg_id]
 
-	def enqueue_fut(self, msg_id, fut, timeout):
+	# pylint: disable=bad-continuation
+	def enqueue_fut(self,
+		msg_id: bytes,
+		fut: asyncio.Future,
+		timeout: asyncio.Handle) -> None:
+
 		self.items[msg_id] = (fut, timeout)
 
-	def get_fut(self, msg_id):
-		return self.items[msg_id]
+	def get_fut(self, msg_id: bytes):
+		return self.items.get(msg_id)
 
-	def dequeue_fut(self, dgram):
+	def dequeue_fut(self, dgram: "Datagram") -> bool:
 		if not dgram.id in self:
 			return False
 		fut, timeout = self.get_fut(dgram.id)
@@ -43,15 +47,15 @@ class RPCMessageQueue:
 		del self.items[dgram.id]
 		return True
 
-	def __contains__(self, key):
+	def __contains__(self, key: str) -> bool:
 		return key in self.items
 
-	def __len__(self):
+	def __len__(self) -> int:
 		return len(self.items)
 
 
 class RPCFindResponse:
-	def __init__(self, response):
+	def __init__(self, response: List[Dict[str, Any]]):
 		"""
 		RPCFindResponse
 
@@ -132,9 +136,11 @@ class Datagram:
 
 		If len(dgram) < 22, then there isnt enough data to unpack a
 		request/response byte, and a msg id
+
 		Returns
 		-------
-			bool
+			bool:
+				Indication that the datagram has proper length
 		"""
 		return len(self.buff) >= 22
 
@@ -144,13 +150,17 @@ class Datagram:
 		data is a byte array, as well as whether or not is data consists
 		of two parts - a RPC function name, and RPC function args
 
-
-
 		Return
 		------
-			None
+			bool:
+				Indication that the datagram is malformed
 		"""
 		return not isinstance(self.data, list) or len(self.data) != 2
+
+	def size(self) -> int:
+		if isinstance(self.data, bool):
+			return len(str(self.data))
+		return len(self.data)
 
 
 class RPCProtocol(asyncio.DatagramProtocol):
@@ -195,8 +205,6 @@ class RPCProtocol(asyncio.DatagramProtocol):
 				object containing the incoming data.
 			addr: Tuple
 				address of the peer sending the data; the exact format depends on the transport.
-
-
 		"""
 		log.debug("incoming dgram from peer at %s", join_addr(addr))
 		asyncio.ensure_future(self._solve_dgram(data, addr))
@@ -211,8 +219,6 @@ class RPCProtocol(asyncio.DatagramProtocol):
 				Data to be processed
 			address: Tuple
 				Address of sending peer
-
-
 		"""
 		dgram = Datagram(buff)
 
@@ -237,8 +243,6 @@ class RPCProtocol(asyncio.DatagramProtocol):
 				Datagram representing incoming message from peer
 			address: Tuple
 				Address of peer receiving response
-
-
 		"""
 		msgargs = (base64.b64encode(dgram.id), address)
 		if dgram.id not in self._outstanding_msgs:
@@ -246,8 +250,8 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			return
 
 		# pylint: disable=bad-continuation
-		log.debug("received response %s for message id %s from %s",
-					dgram.data, dgram.id, join_addr(msgargs[1]))
+		log.debug("received %iB response for message id %s from %s", dgram.size(),
+					dgram.id, join_addr(msgargs[1]))
 		if not self._queue.dequeue_fut(dgram):
 			log.warning("could not mark datagram %s as received", dgram.id)
 
@@ -262,8 +266,6 @@ class RPCProtocol(asyncio.DatagramProtocol):
 				sending peer's data
 			address: Tuple
 				Address of sender
-
-
 		"""
 		if dgram.is_malformed():
 			raise MalformedMessage("Could not read packet: %s" % dgram.data)
@@ -283,10 +285,10 @@ class RPCProtocol(asyncio.DatagramProtocol):
 			func = asyncio.coroutine(func)
 
 		response = await func(address, *dgram.args)
-		# pylint: disable=bad-continuation
-		log.debug("sending response %s for msg id %s to %s", response,
-			base64.b64encode(dgram.id), join_addr(address))
 		txdata = Header.Response + dgram.id + umsgpack.packb(response)
+		# pylint: disable=bad-continuation
+		log.debug("sending %iB response for msg id %s to %s", len(txdata),
+			base64.b64encode(dgram.id), join_addr(address))
 		self.transport.sendto(txdata, address)
 
 	def _timeout(self, msg_id: int) -> None:
@@ -297,8 +299,6 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		----------
 			msg_id: int
 				ID of datagram future to cancel
-
-
 		"""
 		args = (base64.b64encode(msg_id), self._wait)
 		log.error("Did not received reply for msg id %s within %i seconds", *args)
@@ -323,12 +323,12 @@ class RPCProtocol(asyncio.DatagramProtocol):
 		def func(address, *args):
 			msg_id = hashlib.sha1(os.urandom(32)).digest()
 			data = umsgpack.packb([name, args])
-			if len(data) > MAX_PAYLOAD_SIZE:
+			if len(data) > CONFIG.max_payload_size:
 				raise MalformedMessage("Total length of function name and arguments cannot exceed 8K")
 			txdata = Header.Request + msg_id + data
 
 			# pylint: disable=bad-continuation
-			log.debug("executing rpc %s on %s (msgid %s)",
+			log.debug("Attempting to execute rpc %s on peer at %s - msgid %s",
 						name, join_addr(address), base64.b64encode(msg_id))
 			self.transport.sendto(txdata, address)
 

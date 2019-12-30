@@ -1,15 +1,15 @@
-import pickle
 import asyncio
 import logging
-from typing import List, Tuple, Optional
+import os
+import pickle
+from typing import List, Optional, Tuple
 
-from kademlia.protocol import KademliaProtocol
-from kademlia.utils import rand_digest_id, int_to_digest
-from kademlia.storage import StorageIface
-from kademlia.node import Node, NodeType
-from kademlia.crawling import ValueSpiderCrawl, NodeSpiderCrawl
 from kademlia.config import CONFIG
-
+from kademlia.crawling import NodeSpiderCrawl, ValueSpiderCrawl
+from kademlia.node import Node, NodeType
+from kademlia.protocol import KademliaProtocol
+from kademlia.storage import StorageIface
+from kademlia.utils import int_to_digest, rand_digest_id
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -55,12 +55,15 @@ class Server:
 		all open network connections
 		"""
 		if self.transport is not None:
+			log.info("Closing %s transport...", self.node)
 			self.transport.close()
 
 		if self.refresh_loop:
+			log.info("Cancelling %s refresh loop...", self.node)
 			self.refresh_loop.cancel()
 
 		if self.save_state_loop:
+			log.info("Cancelling %s state loop...", self.node)
 			self.save_state_loop.cancel()
 
 	def _create_protocol(self) -> "KademliaProtocol":
@@ -74,18 +77,22 @@ class Server:
 		"""
 		return self.protocol_class(self.node, self.storage, self.ksize)
 
-	async def listen(self, port: int, interface='0.0.0.0') -> None:
+	async def listen(self,
+		port: Optional[int] = None,
+		interface: Optional[str] = None) -> None:
 		"""
 		Start our datagram endpoint listening on the given port
 		Provide interface="::" to accept ipv6 address
 
 		Parameters
 		----------
-			port: int
+			port: Optional[int]
 				Port on which to listen
-			interface: str
+			interface: Optional[str]
 				Interface on which to bind port
 		"""
+		port = port or CONFIG.port
+		interface = interface or CONFIG.interface
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
@@ -93,24 +100,25 @@ class Server:
 
 		self.node.ip = interface
 		self.node.port = port
-		log.info("Peer %s listening at %s:%i", self.node, interface, port)
+		log.info("%s listening at %s:%i", self.node, interface, port)
 		self.transport, self.protocol = await listen
 		# finally, schedule refreshing table
 		self.refresh_table()
 
-	def refresh_table(self, delay=3600) -> None:
+	def refresh_table(self, delay: int = CONFIG.refresh_table) -> None:
 		"""
-		Refresh our routing table via a
+		Refresh our routing table and save our server's state
 
 		Parameters
 		----------
 			delay: int
-				Time to wait (secs) before executing future
+				Time to wait (secs) before executing future (default = set in config)
 		"""
 		log.debug("Refreshing routing table for %s", self.node)
 		asyncio.ensure_future(self._refresh_table())
 		loop = asyncio.get_event_loop()
 		self.refresh_loop = loop.call_later(delay, self.refresh_table)
+		self.save_state_loop = loop.call_later(delay, self.save_state_regularly)
 
 	async def _refresh_table(self) -> None:
 		"""
@@ -121,7 +129,7 @@ class Server:
 		for digest_id in self.protocol.get_refresh_ids():
 			node = Node(digest_id)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
-			log.debug("Peer %s refreshing routing table on %i nearest", self.node, len(nearest))
+			log.debug("%s refreshing routing table on %i nearest", self.node, len(nearest))
 			spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 			results.append(spider.find())
 
@@ -129,9 +137,9 @@ class Server:
 		await asyncio.gather(*results)
 
 		# now republish keys older than one hour
-		for int_key, value in self.storage.iter_older_than(3600):
-			node = Node(int_to_digest(int_key), type=NodeType.Resource, value=value)
-			log.debug("Peer %s republishing resource node %s", self.node, str(node))
+		for node in self.storage.iter_older_than(3600):
+			# node = Node(hex_to_int_digest(hexkey), type=NodeType.Resource, value=value)
+			log.debug("%s republishing node %s from store", self.node, node)
 			await self.set_digest(node)
 
 	def bootstrappable_neighbors(self) -> List["Node"]:
@@ -168,7 +176,7 @@ class Server:
 				scheduled callback for a NodeSpiderCrawl to continue crawling
 				network in order to find peers for self.node
 		"""
-		log.debug("Peer %s attempting to bootstrap with contacts: %s", self.node, addrs)
+		log.debug("%s attempting to bootstrap with contacts: %s", self.node, addrs)
 		cos = list(map(self.bootstrap_node, addrs))
 		gathered = await asyncio.gather(*cos)
 		nodes = [node for node in gathered if node is not None]
@@ -210,7 +218,7 @@ class Server:
 				A recursive call to ValueSpiderCrawl.find which will terminate
 				either when the value is find or the search is exhausted
 		"""
-		log.info("Peer %s looking up key %s", self.node, key)
+		log.info("%s looking up key %s", self.node, key)
 		dkey = int_to_digest(key)
 
 		# if this node has it, return it
@@ -271,7 +279,7 @@ class Server:
 
 		spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 		nodes = await spider.find()
-		log.info("setting '%s' on %s", str(node), list(map(str, nodes)))
+		log.info("setting '%s' on %s", str(node), ",".join(list(map(str, nodes))))
 
 		# if this node is close too, then store here as well
 		biggest = max([n.distance_to(node) for n in nodes])
@@ -288,10 +296,10 @@ class Server:
 
 		Parameters
 		----------
-			fname: str
+			fname: strtest_can_set_and_get
 				File location where in which to write state
 		"""
-		log.info("%i saving state to %s", self.node, fname)
+		log.info("%s saving state to %s", self.node, fname)
 		# pylint: disable=bad-continuation
 		data = {
 			'ksize': self.ksize,
@@ -300,12 +308,12 @@ class Server:
 			'neighbors': self.bootstrappable_neighbors()
 		}
 		if not data['neighbors']:
-			log.warning("Peer %s has no known neighbors, so not writing to cache.", self.node)
+			log.warning("%s has no known neighbors, so not writing to cache.", self.node)
 			return
 		with open(fname, 'wb') as file:
 			pickle.dump(data, file)
 
-	def load_state(self, fname: str) -> "Server":
+	def load_state(self, fname: str = CONFIG.state_file) -> "Server":
 		"""
 		Load the state of this node (the alpha/ksize/id/immediate neighbors)
 		from a cache file with the given fname.
@@ -328,7 +336,10 @@ class Server:
 			svr.bootstrap(data['neighbors'])
 		return svr
 
-	def save_state_regularly(self, fname: str, frequency: int = 600) -> None:
+	# pylint: disable=bad-continuation
+	def save_state_regularly(self,
+		fname: str = CONFIG.state_file,
+		frequency: int = 600) -> None:
 		"""
 		Save the state of node with a given regularity to the given
 		filename.
@@ -340,6 +351,7 @@ class Server:
 			frequency: int
 				Frequency in seconds that the state should be saved. (default=10 mins)
 		"""
+		fname = os.path.join(CONFIG.persist_dir, f"{self.node.long_id}-state.dat")
 		self.save_state(fname)
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
