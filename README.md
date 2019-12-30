@@ -1,7 +1,7 @@
 # Python Distributed Hash Table
 [!This is a fork of bmuller's original repo!](https://github.com/bmuller/kademlia)
 
-[![Build Status](https://secure.travis-ci.org/ralston3/kademlia.png?branch=master)](https://travis-ci.org/bmuller/kademlia)
+[![Build Status](https://secure.travis-ci.org/ralston3/kademlia.png?branch=master)](https://travis-ci.org/ralston3/kademlia)
 [![Docs Status](https://readthedocs.org/projects/kademlia/badge/?version=latest)](http://kademlia.readthedocs.org)
 [![Coverage Status](https://coveralls.io/repos/github/ralston3/kademlia/badge.svg?branch=master)](https://coveralls.io/github/ralston3/kademlia?branch=master)
 
