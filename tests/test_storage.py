@@ -16,8 +16,8 @@ class TestEphemeralStorage:
 		resource = mkrsrc(key=b"one", value=b"two")
 		storage.set(resource)
 
-		_, value = storage.get(resource.hex)
-		assert  value == b"two"
+		node = storage.get(resource.hex)
+		assert  node.value == b"two"
 
 	def test_resource_expires_per_expiry(self, mknode, mkrsrc):
 		# Expiry time of 0 should force the prune to make all items stale immediately
@@ -30,11 +30,11 @@ class TestEphemeralStorage:
 		storage = EphemeralStorage(mknode(), 0)
 		resource = mkrsrc(key=b"one", value=b"two")
 		storage.set(resource)
-		for key, (_, value) in storage:
-			assert key == resource.hex
-			assert value == resource.value
+		for node in storage:
+			assert node.hex == resource.hex
+			assert node.value == resource.value
 
-	def test_iter_older_than(self, mknode, mkrsrc):
+	def test_iter_older_than_returns_proper_keys_for_republishing(self, mknode, mkrsrc):
 		storage = EphemeralStorage(mknode(), 0)
 		resource = mkrsrc(key=b"one", value=b"two")
 		storage.set(resource)
@@ -128,6 +128,6 @@ class TestDiskStorage:
 		# we should only have r2
 		assert len(storage) == 1
 
-		for key, value in storage:
-			assert key == r2.hex
-			assert value == r2.value
+		for node in storage:
+			assert node.hex == r2.hex
+			assert node.value == r2.value

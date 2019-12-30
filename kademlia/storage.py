@@ -49,7 +49,7 @@ class IStorage(ABC):
 	"""
 
 	@abstractmethod
-	def get(self, hexkey: str, default=None):
+	def get(self, hexkey: str, default=None) -> Optional["Node"]:
 		pass
 
 	@abstractmethod
@@ -99,31 +99,93 @@ class EphemeralStorage(IStorage):
 		self.ttl = ttl
 
 	@pre_prune()
-	def get(self, hexkey: str, default: Optional[Any] = None) -> Any:
-		return self.data.get(hexkey, default)
+	def get(self, hexkey: str, default: Optional[Any] = None) -> Optional["Node"]:
+		"""
+		Retrieve a node from storage
+
+		Parameters
+		----------
+			hexkey: str
+				Hex value of node's long_id
+			default: Optional[Any]
+				Default value to return if node not in storage
+
+		Returns
+		-------
+			Optional[Node]:
+				Node if node is in storage, else `default`
+		"""
+		log.debug("%s fetching resource %s", self.node, hexkey)
+		if hexkey in self:
+			_, value = self.data[hexkey]
+			return Node(hex_to_int_digest(hexkey), type=NodeType.Resource, value=value)
+		log.debug("Resource %s not found on node %s", hexkey, self.node)
+		return default
 
 	def set(self, node: "Node"):
+		"""
+		Save a given Node in storage
+
+		Parameters
+		----------
+			node: Node
+				Node to be saved
+		"""
+		log.debug("%s setting resource %s", self.node, node.hex)
 		self.data[node.hex] = (time.monotonic(), node.value)
+		log.debug("%s storage has %i items", self.node, len(self.data))
 
 	def remove(self, hexkey: str) -> None:
+		"""
+		Remove a node from storage
+
+		Parameters
+		----------
+			hexkey: str
+				Hex value of node's long_id
+		"""
 		if hexkey in self:
+			log.debug("%s removing resource %s", self.node, hexkey)
 			del self.data[hexkey]
+			return
+		log.debug("Resource %s not found on node %s", hexkey, self.node)
 
 	def prune(self) -> None:
+		"""
+		Prune storage
+		"""
 		for _, _ in self.iter_older_than(self.ttl):
 			self.data.popitem(last=False)
 
 	def iter_older_than(self, seconds_old: int) -> List[Tuple[int, Any]]:
 		"""
-		Here we use operator.itemgetter(0, 2) in order to return just
-		keys and values (without time.monotonic())
+		Return nodes that are older than `seconds_old`
+
+		** For EphemeralStorage we use operator.itemgetter(0, 2) in order to
+		return just keys and values (without time.monotonic())
+
+		Parameters
+		----------
+			seconds_old: int
+				Time threshold (seconds)
+
+		Returns
+		-------
+			Iterable:
+				Zipped keys, and values of nodes that are older that `seconds_old`
 		"""
 		min_birthday = time.monotonic() - seconds_old
 		zipped = self._triple_iter()
 		matches = takewhile(lambda r: min_birthday >= r[1], zipped)
-		return list(map(operator.itemgetter(0, 2), matches))
+		items = list(map(operator.itemgetter(0, 2), matches))
+		log.debug("%s returning %i nodes for republishing....", self.node, len(items))
+		return items
 
 	def _triple_iter(self) -> Iterable:
+		"""
+		Iterate over EphermeralStorage to return each contents key, time,
+		and values
+		"""
 		ikeys = self.data.keys()
 		ibirthday = map(operator.itemgetter(0), self.data.values())
 		ivalues = map(operator.itemgetter(1), self.data.values())
@@ -135,9 +197,16 @@ class EphemeralStorage(IStorage):
 
 	@pre_prune()
 	def __iter__(self) -> Iterable:
+		log.debug("%s iterating over %i items in storage", self.node, len(self.data))
 		ikeys = self.data.keys()
 		ivalues = map(operator.itemgetter(1), self.data.values())
-		return zip(ikeys, ivalues)
+		# pylint: disable=bad-continuation
+		nodes = [Node(hex_to_int_digest(p[0]),
+					type=NodeType.Resource,
+					value=p[1])
+			for p in zip(ikeys, ivalues)]
+		for node in nodes:
+			yield node
 
 	def __contains__(self, hexkey: str) -> bool:
 		return hexkey in self.data
@@ -170,41 +239,109 @@ class DiskStorage(IStorage):
 			os.mkdir(self.dir)
 
 	@pre_prune()
-	def get(self, hexkey: str, default=None) -> "Node":
+	def get(self, hexkey: str, default: Optional[Any] = None) -> Optional["Node"]:
+		"""
+		Retrieve a node from storage
+
+		Parameters
+		----------
+			hexkey: str
+				Hex value of node's long_id
+			default: Optional[Any]
+				Default value to return if node not in storage
+
+		Returns
+		-------
+			Optional[Node]:
+				Node if node is in storage, else `default`
+		"""
+		log.debug("%s fetching resource %s", self.node, hexkey)
 		if hexkey in self:
 			# pylint: disable=bad-continuation
 			return Node(hex_to_int_digest(hexkey),
 							type=NodeType.Resource,
 							value=self._load_data(hexkey))
+		log.debug("Resource %s not found on node %s", hexkey, self.node)
 		return default
 
 	def set(self, node: "Node") -> None:
+		"""
+		Save a given Node in storage
+
+		Parameters
+		----------
+			node: Node
+				Node to be saved
+		"""
 		if node.hex in self:
 			self.remove(node)
+		log.debug("%s setting resource %s", self.node, node.hex)
 		self._persist_data(node)
+		log.debug("%s storage has %i items", self.node, len(self.contents()))
 
 	def remove(self, hexkey: str) -> None:
+		"""
+		Remove a node from storage
+
+		Parameters
+		----------
+			hexkey: str
+				Hex value of node's long_id
+		"""
 		try:
 			fname = self.dir + "/" + hexkey
 			log.debug("%s removing resource %s", self.node, hexkey)
 			os.remove(fname)
 		except FileNotFoundError as err:
-			log.error("%s could not remove key %s: %s", self.node, hexkey, str(err))
+			log.debug("Resource %s not found on node %s: %s", hexkey, self.node, str(err))
 
 	def iter_older_than(self, seconds_old: int) -> Iterable:
+		"""
+		Return nodes that are older than `seconds_old`
+
+		Parameters
+		----------
+			seconds_old: int
+				Time threshold (seconds)
+
+		Returns
+		-------
+			Iterable:
+				Zipped keys, and values of nodes that are older that `seconds_old`
+		"""
 		to_republish = filter(lambda t: t[1] > seconds_old, self._content_stats())
 		repub_keys = list(map(operator.itemgetter(0), to_republish))
 		repub_data = [self._load_data(k) for k in repub_keys]
+		log.debug("%s returning %i nodes for republishing....", self.node, len(repub_keys))
 		return zip(repub_keys, repub_data)
 
 	def prune(self) -> None:
+		"""
+		Prune storage
+		"""
 		for key, _ in self.iter_older_than(self.ttl):
 			self.remove(key)
 
 	def contents(self) -> List[str]:
+		"""
+		List all nodes in storage
+
+		Returns
+		-------
+			List[str]:
+				Contents of storage directory
+		"""
 		return os.listdir(self.dir)
 
 	def _persist_data(self, node: "Node") -> None:
+		"""
+		Save a given node's value to disk
+
+		Parameters
+		----------
+			node: Node
+				The node to save
+		"""
 		fname = os.path.join(self.dir, node.hex)
 		log.debug("%s attempting to persist %s", self.node, node.hex)
 		data = {"value": node.value, "time": time.monotonic()}
@@ -212,6 +349,19 @@ class DiskStorage(IStorage):
 			pickle.dump(data, ctx)
 
 	def _load_data(self, hexkey: str) -> Optional[Any]:
+		"""
+		Load a data at a given hexkey
+
+		Parameters
+		----------
+			hexkey: str
+				Hexkey to load
+
+		Returns
+		-------
+			Optional[Any]:
+				Data if hexkey is found, else None
+		"""
 		fname = os.path.join(self.dir, hexkey)
 		log.debug("%s attempting to read resource node at %s", self.node, hexkey)
 		try:
@@ -222,6 +372,14 @@ class DiskStorage(IStorage):
 			log.error("%s could not load key at %s: %s", self.node, hexkey, str(err))
 
 	def _content_stats(self) -> List[Tuple[str, float]]:
+		"""
+		For each node in storage, return its 'last modified time'
+
+		Returns
+		-------
+			List[Tuple[str, float]]
+				List of (filename, last_modified_time) pairs
+		"""
 		def time_delta(hexkey: str) -> Tuple[str, float]:
 			path = os.path.join(self.dir, hexkey)
 			statbuff = os.stat(path)
@@ -231,9 +389,16 @@ class DiskStorage(IStorage):
 
 	@pre_prune()
 	def __iter__(self) -> Iterable:
+		log.debug("%s iterating over %i items in storage", self.node, len(self.contents()))
 		ikeys = self.contents()
 		ivalues = [self._load_data(k) for k in ikeys]
-		return zip(ikeys, ivalues)
+		# pylint: disable=bad-continuation
+		nodes = [Node(hex_to_int_digest(p[0]),
+							type=NodeType.Resource,
+							value=p[1])
+					for p in zip(ikeys, ivalues)]
+		for node in nodes:
+			yield node
 
 	def __contains__(self, hexkey: str) -> bool:
 		return hexkey in self.contents()
@@ -244,6 +409,7 @@ class DiskStorage(IStorage):
 
 	@pre_prune()
 	def __len__(self) -> int:
+		log.debug("%s storage has %i items", self.node, len(self.contents()))
 		return len(self.contents())
 
 

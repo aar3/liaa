@@ -89,25 +89,6 @@ async def gather_dict(dic: Dict[str, Any]) -> Dict[str, Any]:
 	return dict(zip(dic.keys(), results))
 
 
-# def digest(arr: Union[str, bytes]) -> bytes:
-# 	"""
-# 	Return the SHA1 hash of a given string/byte array
-
-# 	Parameters
-# 	----------
-# 		arr: Union[str, bytes]
-# 			Byte/string array to be hashed
-
-# 	Returns
-# 	-------
-# 		bytes:
-# 			Hash of given byte/string array
-# 	"""
-# 	if not isinstance(arr, bytes):
-# 		arr = str(arr).encode('utf8')
-# 	return hashlib.sha1(arr).digest()
-
-
 def digest_to_int(byte_arr: bytes) -> int:
 	return hex_to_int(byte_arr.hex())
 

@@ -11,8 +11,8 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # pylint: disable=too-few-public-methods
 class NodeType:
-	Peer = 0
-	Resource = 1
+	Peer = "peer"
+	Resource = "resource"
 
 
 # pylint: disable=too-many-instance-attributes
@@ -99,7 +99,10 @@ class Node:
 		return repr([self.long_id, self.ip, self.port])
 
 	def __str__(self):
-		return f"<{self.type}, {self.ip}, {self.port}, {self.long_id}>"
+		# return f"<{self.type}, {self.ip}, {self.port}, {self.long_id}>"
+		if self.type == NodeType.Peer:
+			return f"{self.type}@{self.ip}:{self.port}"
+		return f"{self.type}@{self.long_id}"
 
 
 class NodeHeap:
