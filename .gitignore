@@ -16,6 +16,7 @@ __pycache__
 .envrc
 venv/
 virtualenv/
+test-virtualenv/
 
 # testing
 .coverage
