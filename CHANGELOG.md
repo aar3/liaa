@@ -18,3 +18,4 @@
 - [refactor] refactor storage implementation for cohesiveness
    - use hex keys to storage resources (long_id not good for umsgpack)
 - [enhancement] create multi-peer working examples (examples/multi_peer_simulator.py)
+- [enhancement] add tcp listener on server

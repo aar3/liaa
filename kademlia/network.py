@@ -77,7 +77,7 @@ class Server:
 		"""
 		return self.protocol_class(self.node, self.storage, self.ksize)
 
-	async def listen(self,
+	async def listen_udp(self,
 		port: Optional[int] = None,
 		interface: Optional[str] = None) -> None:
 		"""
@@ -96,7 +96,7 @@ class Server:
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
-															local_addr=(interface, port))
+												local_addr=(interface, port))
 
 		self.node.ip = interface
 		self.node.port = port

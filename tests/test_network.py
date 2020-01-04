@@ -19,7 +19,7 @@ class TestServer:
 	def test_server_can_stop_ok(self):
 		loop = asyncio.get_event_loop()
 		server = Server()
-		loop.run_until_complete(server.listen(PORT))
+		loop.run_until_complete(server.listen_udp(PORT))
 		assert not server.refresh_loop.cancelled()
 		server.stop()
 		assert server.refresh_loop.cancelled()
@@ -34,7 +34,7 @@ class TestServer:
 		assert not server.protocol
 
 		# listen() should intialize instance attributes
-		loop.run_until_complete(server.listen(PORT))
+		loop.run_until_complete(server.listen_udp(PORT))
 
 		assert server.transport
 		assert server.protocol
@@ -61,13 +61,13 @@ class TestServer:
 		# An ordinary server does NOT have a CoconutProtocol as its protocol...
 		loop = asyncio.get_event_loop()
 		server = Server()
-		loop.run_until_complete(server.listen(PORT))
+		loop.run_until_complete(server.listen_udp(PORT))
 		assert not isinstance(server.protocol, CoconutProtocol)
 		server.stop()
 
 		# ...but our custom server does.
 		husk_server = HuskServer()
-		loop.run_until_complete(husk_server.listen(PORT))
+		loop.run_until_complete(husk_server.listen_udp(PORT))
 		assert isinstance(husk_server.protocol, CoconutProtocol)
 		husk_server.stop()
 

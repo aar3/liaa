@@ -17,7 +17,7 @@ def main():
 	loop.set_debug(True)
 
 	server = Server()
-	loop.run_until_complete(server.listen(int(sys.argv[1])))
+	loop.run_until_complete(server.listen_udp(int(sys.argv[1])))
 
 	try:
 		loop.run_forever()

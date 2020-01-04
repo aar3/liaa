@@ -55,7 +55,7 @@ def main():
 		sys.exit(1)
 
 	server = Server()
-	loop.run_until_complete(server.listen(int(parser.get("-p", "--port"))))
+	loop.run_until_complete(server.listen_udp(int(parser.get("-p", "--port"))))
 
 	try:
 		loop.run_forever()

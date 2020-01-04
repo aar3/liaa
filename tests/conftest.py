@@ -8,8 +8,8 @@ import umsgpack
 import pytest
 
 # pylint: disable=bad-continuation
-from kademlia.rpc import (
-	RPCProtocol,
+from kademlia.protocol import (
+	RPCDatagramProtocol,
 	RPCMessageQueue,
 	Datagram,
 	Header
@@ -25,7 +25,7 @@ from kademlia.utils import rand_digest_id, rand_str
 @pytest.yield_fixture
 def bootstrap_node(event_loop):
 	server = Server()
-	event_loop.run_until_complete(server.listen(8468))
+	event_loop.run_until_complete(server.listen_udp(8468))
 
 	try:
 		yield ('127.0.0.1', 8468)
@@ -82,7 +82,7 @@ def mkqueue():
 		loop = asyncio.new_event_loop()
 		fut = loop.create_future()
 		# pylint: disable=protected-access
-		proto = RPCProtocol()
+		proto = RPCDatagramProtocol()
 		timeout = loop.call_later(proto._wait, proto._timeout, msg_id)
 
 		queue = RPCMessageQueue()

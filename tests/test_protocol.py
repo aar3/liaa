@@ -3,7 +3,7 @@ import random
 import time
 
 # pylint: disable=bad-continuation
-from kademlia.rpc import RPCMessageQueue, Datagram
+from kademlia.protocol import RPCMessageQueue, Datagram
 from kademlia.protocol import KademliaProtocol
 from kademlia.storage import EphemeralStorage
 
