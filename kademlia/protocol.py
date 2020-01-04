@@ -185,13 +185,13 @@ class Datagram:
 class HttpMessage:
 	def __init__(self, data):
 		self.data = data.decode()
-		self.headers = None
+		self.headers = {}
 		self.body = None
 
 		try:
 			self.headers = self._make_headers()
 			self.body = self._set_body()
-		except Exception as err:
+		except ValueError as err:
 			log.error("Error deriving http message: %s", str(err))
 
 	def _make_headers(self):
@@ -205,11 +205,23 @@ class HttpMessage:
 			headers[name] = value
 		return headers
 
+	def has_header_value(self, header, value):
+		# pylint: disable=bad-continuation
+		conditions = [
+			self.headers is not None,
+			header in self.headers,
+			self.headers.get(header) == value,
+		]
+		return all(conditions)
+
 	def _set_body(self):
 		return self.body.split("\r\n\r\n")[-1]
 
 	def is_invalid(self) -> bool:
 		return not self.headers or not self.body
+
+	def __str__(self):
+		return self.data
 
 
 class RPCDatagramProtocol(asyncio.DatagramProtocol):
@@ -392,29 +404,35 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		return func
 
 
-class TransportProtocol(asyncio.Protocol):
+class HttpInterface(asyncio.Protocol):
 	def __init__(self, source_node: "Node", storage: "IStorage", wait: int = 5):
 		self.source_node = source_node
 		self.storage = storage
 		self.wait = wait
+		self.transport = None
 
 	def connection_made(self, transport: asyncio.Handle) -> None:
-		# pylint: disable=attribute-defined-outside-init
 		self.transport = transport
 
-	def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
-		asyncio.ensure_future(self._process_message(data, addr))
+	def data_received(self, data: bytes) -> None:
+		asyncio.ensure_future(self._handle_data(data))
 
-	async def _process_message(self, buff: bytes, address: Tuple[str, int]) -> None:
+	async def _handle_data(self, buff: bytes) -> None:
 		message = HttpMessage(buff)
-		# TODO: finish
+		if message.is_invalid():
+			log.error("%s %s received invalid message", self.source_node, self.__class__.__name__)
+			self.transport.close()
+		if message.has_header_value("X-Method", "store"):
+			print("store called")
+			self.call_store(message)
 
-	def call_store(self, data):
-		self.storage.set(data)
+	def call_store(self, message):
+		node = Node(message.data)
+		self.storage.set(node)
 
 	def fetch(self, key):
 		return self.storage.get(key)
-	
+
 
 
 class KademliaProtocol(RPCDatagramProtocol):

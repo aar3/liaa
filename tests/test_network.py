@@ -24,22 +24,35 @@ class TestServer:
 		server.stop()
 		assert server.refresh_loop.cancelled()
 
-	def test_server_listen_initializes_ok(self):
+	def test_server_listen_initializes_udp_ok(self):
 		loop = asyncio.get_event_loop()
 		server = Server()
 
-		assert not server.transport
+		assert not server.udp_transport
 		assert not server.protocol
 		assert not server.refresh_loop
-		assert not server.protocol
 
-		# listen() should intialize instance attributes
+		# listen_udp() should intialize instance attributes
 		loop.run_until_complete(server.listen_udp(PORT))
 
-		assert server.transport
+		assert server.udp_transport
 		assert server.protocol
 		assert isinstance(server.refresh_loop, asyncio.Handle)
 		assert isinstance(server.protocol, KademliaProtocol)
+
+		server.stop()
+
+	def test_server_listen_initializes_http_ok(self):
+		loop = asyncio.get_event_loop()
+		server = Server()
+
+		assert not server.listener
+
+		# listen_http() should intialize instance attributes
+		loop.run_until_complete(server.listen_http(PORT))
+
+		assert server.listener
+		assert isinstance(server.listener, asyncio.AbstractServer)
 
 		server.stop()
 

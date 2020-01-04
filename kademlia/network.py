@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 from kademlia.config import CONFIG
 from kademlia.crawling import NodeSpiderCrawl, ValueSpiderCrawl
 from kademlia.node import Node, NodeType
-from kademlia.protocol import KademliaProtocol
+from kademlia.protocol import KademliaProtocol, HttpInterface
 from kademlia.storage import StorageIface
 from kademlia.utils import int_to_digest, rand_digest_id
 
@@ -44,19 +44,20 @@ class Server:
 		self.ksize = ksize
 		self.alpha = alpha
 
-		self.transport = None
+		self.udp_transport = None
 		self.protocol = None
 		self.refresh_loop = None
 		self.save_state_loop = None
+		self.listener = None
 
 	def stop(self) -> None:
 		"""
 		Stop a currently running server - all event loops, and close
 		all open network connections
 		"""
-		if self.transport is not None:
-			log.info("Closing %s transport...", self.node)
-			self.transport.close()
+		if self.udp_transport is not None:
+			log.info("Closing %s udp transport...", self.node)
+			self.udp_transport.close()
 
 		if self.refresh_loop:
 			log.info("Cancelling %s refresh loop...", self.node)
@@ -65,6 +66,10 @@ class Server:
 		if self.save_state_loop:
 			log.info("Cancelling %s state loop...", self.node)
 			self.save_state_loop.cancel()
+
+		if self.listener:
+			log.info("Closing %s server...", self.node)
+			self.listener.close()
 
 	def _create_protocol(self) -> "KademliaProtocol":
 		"""
@@ -76,6 +81,9 @@ class Server:
 				Instance of the kademlia protocol
 		"""
 		return self.protocol_class(self.node, self.storage, self.ksize)
+
+	def _create_http_iface(self) -> "HttpInterface":
+		return HttpInterface(self.node, self.storage)
 
 	async def listen_udp(self,
 		port: Optional[int] = None,
@@ -100,10 +108,28 @@ class Server:
 
 		self.node.ip = interface
 		self.node.port = port
-		log.info("%s listening at %s:%i", self.node, interface, port)
-		self.transport, self.protocol = await listen
+		log.info("%s UDP listening at %s:%i", self.node, interface, port)
+		self.udp_transport, self.protocol = await listen
 		# finally, schedule refreshing table
 		self.refresh_table()
+
+	async def listen_http(self, port=None, interface=None):
+		port = port or CONFIG.port
+		interface = interface or CONFIG.interface
+
+		# if we are only using the http endpoint (and not the udp endpoint)
+		if not self.node.port:
+			self.node.port = port
+		if not self.node.ip:
+			self.node.ip = interface
+
+		loop = asyncio.get_event_loop()
+		# pylint: disable=bad-continuation
+		self.listener = await loop.create_server(self._create_http_iface,
+													host=interface, port=port)
+		log.info("%s HTTP listening at %s:%i", self.node, interface, port)
+
+		asyncio.ensure_future(self.listener.serve_forever())
 
 	def refresh_table(self, delay: int = CONFIG.refresh_table) -> None:
 		"""

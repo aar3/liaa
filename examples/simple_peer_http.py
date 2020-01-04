@@ -1,14 +1,10 @@
-# simple_peer.py
+# simple_peer_http.py
 #
-# In this example, we demonstrate how we can simply create a peer's server,
-# and listen for incoming connections. Note that this example by itself won't
-# do much other than instantiate a peer and its storage.
-#
-# This example can be used in tandem with examples/multi_peer_set.py
+# Same as examples/simple_peer_udp.py but using http
 #
 # Example
 # -------
-# python examples/simple_peer.py -p 8000
+# python examples/simple_peer_http.py -p 8000
 
 import logging
 import asyncio
@@ -55,7 +51,7 @@ def main():
 		sys.exit(1)
 
 	server = Server()
-	loop.run_until_complete(server.listen_udp(int(parser.get("-p", "--port"))))
+	loop.run_until_complete(server.listen_http(int(parser.get("-p", "--port"))))
 
 	try:
 		loop.run_forever()
