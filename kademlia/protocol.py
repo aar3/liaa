@@ -2,16 +2,20 @@ import asyncio
 import base64
 import hashlib
 import logging
+import sys
 import os
+import json
 import random
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union, Optional
+
 
 import umsgpack
 
 from kademlia.config import CONFIG
 from kademlia.node import Node, NodeType
 from kademlia.routing import RoutingTable
-from kademlia.utils import join_addr
+from kademlia import __version__
+from kademlia.utils import join_addr, rand_digest_id
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -23,45 +27,6 @@ class Header:
 
 class MalformedMessage(Exception):
 	pass
-
-class RPCMessageQueue:
-	def __init__(self):
-		"""
-		RPCMessageQueue
-
-		Container used to hold incoming request and outgpoing response
-		RPC futures
-		"""
-		self.items: Dict[bytes, Tuple[asyncio.Future, asyncio.Handle]] = {}
-
-	def remove_item(self, msg_id: bytes) -> None:
-		del self.items[msg_id]
-
-	# pylint: disable=bad-continuation
-	def enqueue_fut(self,
-		msg_id: bytes,
-		fut: asyncio.Future,
-		timeout: asyncio.Handle) -> None:
-
-		self.items[msg_id] = (fut, timeout)
-
-	def get_fut(self, msg_id: bytes):
-		return self.items.get(msg_id)
-
-	def dequeue_fut(self, dgram: "Datagram") -> bool:
-		if not dgram.id in self:
-			return False
-		fut, timeout = self.get_fut(dgram.id)
-		fut.set_result((True, dgram.data))
-		timeout.cancel()
-		del self.items[dgram.id]
-		return True
-
-	def __contains__(self, key: str) -> bool:
-		return key in self.items
-
-	def __len__(self) -> int:
-		return len(self.items)
 
 
 class RPCFindResponse:
@@ -127,103 +92,6 @@ class RPCFindResponse:
 		return [Node(*nodeple) for nodeple in nodelist]
 
 
-class Datagram:
-	def __init__(self, buff: bytes):
-		"""
-		Datagram
-
-		A wrapper over a byte array that is used to represent data
-		passed to and from each peer in the network
-
-		Parameters
-		----------
-			buff: bytes
-				Byte array to be used as message
-		"""
-		self.buff = buff or []
-		self.action = self.buff[:1]
-		# pylint: disable=invalid-name
-		self.id = self.buff[1:21]
-		self.data = umsgpack.unpackb(self.buff[21:])
-
-		if self.has_valid_len() and not self.is_malformed():
-			self.funcname, self.args = self.data
-
-	def has_valid_len(self) -> bool:
-		"""
-		Determine if a datagram's buffer is long enough to be processed
-
-		If len(dgram) < 22, then there isnt enough data to unpack a
-		request/response byte, and a msg id
-
-		Returns
-		-------
-			bool:
-				Indication that the datagram has proper length
-		"""
-		return len(self.buff) >= 22
-
-	def is_malformed(self) -> bool:
-		"""
-		Determine if a datagram is invalid/corrupted by seeing if its
-		data is a byte array, as well as whether or not is data consists
-		of two parts - a RPC function name, and RPC function args
-
-		Return
-		------
-			bool:
-				Indication that the datagram is malformed
-		"""
-		return not isinstance(self.data, list) or len(self.data) != 2
-
-	def size(self) -> int:
-		if isinstance(self.data, bool):
-			return len(str(self.data))
-		return len(self.data)
-
-
-class HttpMessage:
-	def __init__(self, data):
-		self.data = data.decode()
-		self.headers = {}
-		self.body = None
-
-		try:
-			self.headers = self._make_headers()
-			self.body = self._set_body()
-		except ValueError as err:
-			log.error("Error deriving http message: %s", str(err))
-
-	def _make_headers(self):
-		headerdata = self.data.split("\r\n\r\n")[0]
-		parts = headerdata.split("\r\n")
-		headers = {}
-		for part in parts:
-			name, value = part.split(":")
-			name = name.strip()
-			value = value.strip()
-			headers[name] = value
-		return headers
-
-	def has_header_value(self, header, value):
-		# pylint: disable=bad-continuation
-		conditions = [
-			self.headers is not None,
-			header in self.headers,
-			self.headers.get(header) == value,
-		]
-		return all(conditions)
-
-	def _set_body(self):
-		return self.body.split("\r\n\r\n")[-1]
-
-	def is_invalid(self) -> bool:
-		return not self.headers or not self.body
-
-	def __str__(self):
-		return self.data
-
-
 class RPCDatagramProtocol(asyncio.DatagramProtocol):
 	def __init__(self, wait: int = 5):
 		"""
@@ -239,7 +107,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
 		self._wait = wait
 		self._outstanding_msgs: Dict[int, Tuple[asyncio.Future, asyncio.Handle]] = {}
-		self._queue = RPCMessageQueue()
+		self._new_queue = {}
 		self.transport = None
 
 	def connection_made(self, transport: asyncio.Handle) -> None:
@@ -251,8 +119,6 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			transport: asyncio.Handle
 				The transport representing the connection. The protocol is
 				responsible for storing the reference to its transport
-
-
 		"""
 		self.transport = transport
 
@@ -281,75 +147,80 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			address: Tuple
 				Address of sending peer
 		"""
-		dgram = Datagram(buff)
-
-		if not dgram.has_valid_len():
+		if len(buff) < 22:
 			log.warning("received invalid dgram from %s, ignoring", address)
 			return
 
-		if dgram.action == Header.Request:
-			asyncio.ensure_future(self._accept_request(dgram, address))
-		elif dgram.action == Header.Response:
-			self._accept_response(dgram, address)
+		if buff[:1] == Header.Request:
+			asyncio.ensure_future(self._accept_request(buff, address))
+		elif buff[:1] == Header.Response:
+			self._accept_response(buff, address)
 		else:
 			log.debug("Received unknown message from %s, ignoring", address)
 
-	def _accept_response(self, dgram: "Datagram", address: Tuple[str, int]) -> None:
+	def _accept_response(self, buff: bytes, address: Tuple[str, int]) -> None:
 		"""
 		Processor for incoming responses
 
 		Parameters
 		----------
-			dgram: Datagram
+			buff: bytes
 				Datagram representing incoming message from peer
 			address: Tuple
 				Address of peer receiving response
 		"""
-		msgargs = (base64.b64encode(dgram.id), address)
-		if dgram.id not in self._outstanding_msgs:
+		idf, data = buff[1:21], umsgpack.unpackb(buff[21:])
+		msgargs = (base64.b64encode(idf), address)
+		if idf not in self._outstanding_msgs:
 			log.warning("received unknown message %s from %s; ignoring", *msgargs)
 			return
 
 		# pylint: disable=bad-continuation
-		log.debug("received %iB response for message id %s from %s", dgram.size(),
-					dgram.id, join_addr(msgargs[1]))
-		if not self._queue.dequeue_fut(dgram):
-			log.warning("could not mark datagram %s as received", dgram.id)
+		log.debug("received %iB response for message id %s from %s", sys.getsizeof(data),
+					idf, join_addr(msgargs[1]))
 
-	async def _accept_request(self, dgram: "Datagram", address: Tuple[str, int]) -> None:
+		if not idf in self._new_queue:
+			log.warning("could not mark datagram %s as received", idf)
+			return
+
+		fut, timeout = self._new_queue[idf]
+		fut.set_result((True, data))
+		timeout.cancel()
+		del self._new_queue[idf]
+
+	async def _accept_request(self, buff: bytes, address: Tuple[str, int]) -> None:
 		"""
 		Process an incoming request datagram as well as its RPC response
 
 		Parameters
 		----------
-			dgram: Datagram
-				Incoming datagram used to identify peer, process request, and pass
-				sending peer's data
+			buff: bytes
+				Datagram representing incoming message from peer
 			address: Tuple
 				Address of sender
 		"""
-		if dgram.is_malformed():
-			raise MalformedMessage("Could not read packet: %s" % dgram.data)
+		idf, data = buff[1:21], umsgpack.unpackb(buff[21:])
+		funcname, args = data
 
 		# basically, when we execute an operation such as protocol.ping(), we will
 		# send 'ping' as the function name, at which point, we concat 'rpc_' onto
 		# the function name so that when we call getattr(self, funcname) we will
 		# get the rpc version of the fucname
 
-		func = getattr(self, "rpc_%s" % dgram.funcname, None)
+		func = getattr(self, "rpc_%s" % funcname, None)
 		if func is None or not callable(func):
-			msgargs = (self.__class__.__name__, dgram.funcname)
+			msgargs = (self.__class__.__name__, funcname)
 			log.warning("%s has no callable method rpc_%s; ignoring request", *msgargs)
 			return
 
 		if not asyncio.iscoroutinefunction(func):
 			func = asyncio.coroutine(func)
 
-		response = await func(address, *dgram.args)
-		txdata = Header.Response + dgram.id + umsgpack.packb(response)
+		response = await func(address, *args)
+		txdata = Header.Response + idf + umsgpack.packb(response)
 		# pylint: disable=bad-continuation
 		log.debug("sending %iB response for msg id %s to %s", len(txdata),
-			base64.b64encode(dgram.id), join_addr(address))
+			base64.b64encode(idf), join_addr(address))
 		self.transport.sendto(txdata, address)
 
 	def _timeout(self, msg_id: int) -> None:
@@ -397,7 +268,8 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			loop = asyncio.get_event_loop()
 			future = loop.create_future()
 			timeout = loop.call_later(self._wait, self._timeout, msg_id)
-			self._queue.enqueue_fut(msg_id, future, timeout)
+			# self._queue.enqueue_fut(msg_id, future, timeout)
+			self._new_queue[msg_id] = (future, timeout)
 			self._outstanding_msgs[msg_id] = (future, timeout)
 			return future
 
@@ -406,34 +278,141 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 
 class HttpInterface(asyncio.Protocol):
 	def __init__(self, source_node: "Node", storage: "IStorage", wait: int = 5):
+		"""
+		HttpInterface
+
+		Public interface for storing data and fetching data on this server
+
+		Parameters
+		----------
+			source_node: Node
+				Our node (representing the current machine)
+			storage: IStorage
+				Storage interface
+			wait: int
+				Timeout of requests
+		"""
 		self.source_node = source_node
 		self.storage = storage
 		self.wait = wait
 		self.transport = None
 
 	def connection_made(self, transport: asyncio.Handle) -> None:
+		"""
+		Called when a connection is made. (overload from BaseProtocol)
+
+		Parameters
+		----------
+			transport: asyncio.Handle
+				The transport representing the connection. The protocol is
+				responsible for storing the reference to its transport
+		"""
 		self.transport = transport
 
 	def data_received(self, data: bytes) -> None:
+		"""
+		Called when in an incoming stream is received.
+
+		Parameters
+		----------
+			data: bytes
+				object containing the incoming data.
+		"""
 		asyncio.ensure_future(self._handle_data(data))
 
 	async def _handle_data(self, buff: bytes) -> None:
-		message = HttpMessage(buff)
-		if message.is_invalid():
-			log.error("%s %s received invalid message", self.source_node, self.__class__.__name__)
-			self.transport.close()
-		if message.has_header_value("X-Method", "store"):
-			print("store called")
-			self.call_store(message)
+		"""
+		Process the incoming stream
 
-	def call_store(self, message):
-		node = Node(message.data)
+		Parameters
+		----------
+			buff: bytes
+				The buffered stream to be process
+		"""
+		data = buff.decode()
+		rawheaders, rawbody = data.split("\r\n\r\n")
+		unmarshalled = json.loads(rawbody)
+
+		log.debug("Received new http message %s", data)
+
+		if rawheaders.startswith("GET"):
+			response = self.fetch_data(unmarshalled.get("key"))
+		elif rawheaders.startswith("PUT"):
+			response = self.call_store(rawbody)
+		else:
+			body = json.dumps({"details": "Not implemented"})
+			response = self.pack_response(501, "NOT IMPLEMENTED", body)
+
+		self.transport.write(response.encode())
+		self.transport.close()
+
+	def call_store(self, payload: Optional[Any]) -> str:
+		"""
+		Given a payload, save it to storage
+
+		Parameters
+		----------
+			payload: Optional[Any]
+				Data to be saved
+
+		Returns
+		-------
+			str:
+				Response to write to client
+		"""
+		node = Node(rand_digest_id(), type=NodeType.Resource, value=payload)
 		self.storage.set(node)
+		return self.pack_response(200, "OK", json.dumps({"details": "ok"}))
 
-	def fetch(self, key):
-		return self.storage.get(key)
+	def fetch_data(self, key: Optional[str]) -> str:
+		"""
+		Given a key, return the its value, if we have the key in storage
 
+		Parameters
+		----------
+			key: Optional[str]
+				Hexkey of the resource to be found
 
+		Returns
+		-------
+			str:
+				Response to write to client
+		"""
+		node = self.storage.get(key)
+		# pylint: disable=bad-continuation
+		if node:
+			return self.pack_response(200, "OK",
+					json.dumps({"details": "found", "data": str(node)}))
+		return self.pack_response(404, "NOT FOUND",
+				json.dumps({"details": "Not found", "data": str(node)}))
+
+	def pack_response(self, code: int, msg: str, body: Dict[str, str]) -> str:
+		"""
+		Pack a response's parts into an HTTP message
+
+		Parameters
+		----------
+			code: int
+				Response status code
+			msg: str
+				Response status message
+			body: Dict[str, str]
+				Marshalled body payload
+
+		Returns
+		-------
+			str:
+				String-formatted response
+		"""
+		response = f"HTTP/1.1 {code} {msg}\r\n"\
+			f"Host: {self.source_node.ip}:{self.source_node.port}\r\n"\
+			f"User-Agent: kademlia.{__version__}\r\n"\
+			"Accept: */*\r\n"\
+			f"Content-Length: {len(body)}\r\n"\
+			f"Content-Type: application/x-www-form-urlencoded\r\n\r\n"\
+			f"{body}"
+
+		return response
 
 class KademliaProtocol(RPCDatagramProtocol):
 	# pylint: disable=no-self-use,bad-continuation

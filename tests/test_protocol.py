@@ -1,58 +1,8 @@
-import asyncio
 import random
 import time
 
-# pylint: disable=bad-continuation
-from kademlia.protocol import RPCMessageQueue, Datagram
 from kademlia.protocol import KademliaProtocol
 from kademlia.storage import EphemeralStorage
-
-
-class TestRPCMessageQueue:
-	# pylint: disable=no-self-use
-	def test_can_instantiate_queue(self):
-		queue = RPCMessageQueue()
-		assert isinstance(queue, RPCMessageQueue)
-
-	def test_can_enqueue_item(self, mkqueue):
-		queue = mkqueue()
-		assert len(queue) == 1
-
-	def test_can_get_fut(self, mkqueue, mkdgram):
-		dgram = mkdgram()
-		queue = mkqueue(dgram.id)
-		fut, timeout = queue.get_fut(dgram.id)
-		assert isinstance(fut, asyncio.Future)
-		assert isinstance(timeout, asyncio.Handle)
-
-	def test_contains_return_true_if_msg_id_found(self, mkqueue, mkdgram):
-		dgram = mkdgram()
-		queue = mkqueue(dgram.id)
-		assert dgram.id in queue
-
-	def test_dequeue_returns_true_when_dequeued(self, mkqueue, mkdgram):
-		dgram = mkdgram()
-		queue = mkqueue(dgram.id)
-		assert queue.dequeue_fut(dgram)
-
-
-class TestDatagram:
-	# pylint: disable=no-self-use
-	def test_can_init_dgram(self, mkdgram):
-		assert isinstance(mkdgram(), Datagram)
-
-	def test_dgram_has_valid_len(self, mkdgram):
-		dgram = mkdgram()
-		assert dgram.has_valid_len()
-
-	def test_is_malformed_is_false(self, mkdgram):
-		dgram = mkdgram()
-		assert not dgram.is_malformed()
-
-	def test_is_malformed_is_true(self, mkdgram):
-		dgram = mkdgram(data="123")
-		assert dgram.is_malformed()
-
 
 
 class TestKademliaProtocol:
