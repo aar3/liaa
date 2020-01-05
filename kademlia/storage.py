@@ -133,7 +133,7 @@ class EphemeralStorage(IStorage):
 		"""
 		log.debug("%s setting resource %s", self.node, node.hex)
 		self.data[node.hex] = (time.monotonic(), node.value)
-		log.debug("%s storage has %i items", self.node, len(self.data))
+		log.debug("%s storage has %i items", self.node, len(self))
 
 	def remove(self, hexkey: str) -> None:
 		"""
@@ -216,7 +216,6 @@ class EphemeralStorage(IStorage):
 		return len(self.data)
 
 
-
 class DiskStorage(IStorage):
 	def __init__(self, node: "Node", ttl=604800):
 		"""
@@ -277,7 +276,7 @@ class DiskStorage(IStorage):
 			self.remove(node)
 		log.debug("%s setting resource %s", self.node, node.hex)
 		self._persist_data(node)
-		log.debug("%s storage has %i items", self.node, len(self.contents()))
+		log.debug("%s storage has %i items", self.node, len(self))
 
 	def remove(self, hexkey: str) -> None:
 		"""
@@ -409,7 +408,6 @@ class DiskStorage(IStorage):
 
 	@pre_prune()
 	def __len__(self) -> int:
-		log.debug("%s storage has %i items", self.node, len(self.contents()))
 		return len(self.contents())
 
 

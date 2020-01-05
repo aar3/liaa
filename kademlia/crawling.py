@@ -4,7 +4,7 @@ import asyncio
 from typing import List, Any, Dict
 
 from kademlia.node import NodeHeap
-from kademlia.rpc import RPCFindResponse
+from kademlia.protocol import RPCFindResponse
 from kademlia.utils import gather_dict
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name

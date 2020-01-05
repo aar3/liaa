@@ -8,12 +8,7 @@ import umsgpack
 import pytest
 
 # pylint: disable=bad-continuation
-from kademlia.rpc import (
-	RPCProtocol,
-	RPCMessageQueue,
-	Datagram,
-	Header
-)
+from kademlia.protocol import RPCDatagramProtocol, Header
 from kademlia.network import Server
 from kademlia.node import Node, NodeType
 from kademlia.protocol import KademliaProtocol
@@ -25,7 +20,7 @@ from kademlia.utils import rand_digest_id, rand_str
 @pytest.yield_fixture
 def bootstrap_node(event_loop):
 	server = Server()
-	event_loop.run_until_complete(server.listen(8468))
+	event_loop.run_until_complete(server.listen_udp(8468))
 
 	try:
 		yield ('127.0.0.1', 8468)
@@ -54,8 +49,7 @@ def mkdgram():
 		"""
 		Create a datagram
 		"""
-		buff = header + hashlib.sha1(msg_id).digest() + umsgpack.packb(data)
-		return Datagram(buff)
+		return header + hashlib.sha1(msg_id).digest() + umsgpack.packb(data)
 	return _mkdgram
 
 
@@ -72,23 +66,6 @@ def mkrsrc():
 						type=NodeType.Resource,
 						value=value)
 	return _mkrsrc
-
-@pytest.fixture()
-def mkqueue():
-	def _mkqueue(msg_id=os.urandom(32)):
-		"""
-		Create a fake RPCMessageQueue
-		"""
-		loop = asyncio.new_event_loop()
-		fut = loop.create_future()
-		# pylint: disable=protected-access
-		proto = RPCProtocol()
-		timeout = loop.call_later(proto._wait, proto._timeout, msg_id)
-
-		queue = RPCMessageQueue()
-		queue.enqueue_fut(msg_id, fut, timeout)
-		return queue
-	return _mkqueue
 
 
 # pylint: disable=too-few-public-methods
