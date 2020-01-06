@@ -12,7 +12,6 @@ from collections.abc import Iterable
 from itertools import takewhile
 from typing import Any, List, Optional, Tuple
 
-from kademlia.config import CONFIG
 from kademlia.node import Node, NodeType
 from kademlia.utils import hex_to_int_digest
 
@@ -217,7 +216,12 @@ class EphemeralStorage(IStorage):
 
 
 class DiskStorage(IStorage):
-	def __init__(self, node: "Node", ttl=604800):
+	# pylint: disable=bad-continuation
+	def __init__(self,
+		node: "Node",
+		kstore_dir: str = os.path.join(os.path.expanduser("~"), ".kademlia"),
+		ttl=604800
+		):
 		"""
 		DiskStorage
 
@@ -225,16 +229,18 @@ class DiskStorage(IStorage):
 		----------
 			node: Node
 				The node representing this peer
+			kstore_dir: str
+				Directory at which all kademlia storage is placed
 			ttl: int
 				Max age that items can live untouched before being pruned
 				(default=604800 seconds = 1 week)
 		"""
 		self.node = node
 		self.ttl = ttl
-		self.dir = os.path.join(CONFIG.persist_dir, str(self.node.long_id))
+		self.dir = os.path.join(kstore_dir, str(self.node.long_id))
 
 		if not os.path.exists(self.dir):
-			log.debug("creating node disk storage dir at %s", self.dir)
+			log.debug("creating %s disk storage dir at %s", self.node, self.dir)
 			os.mkdir(self.dir)
 
 	@pre_prune()
@@ -411,4 +417,4 @@ class DiskStorage(IStorage):
 		return len(self.contents())
 
 
-StorageIface = EphemeralStorage
+StorageIface = DiskStorage

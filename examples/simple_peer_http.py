@@ -37,9 +37,7 @@ def main():
 	parser = ArgsParser()
 
 	try:
-		args = "p:"
-		long_args = ["--port"]
-		opts, args = getopt.getopt(sys.argv[1:], args, long_args)
+		opts, _ = getopt.getopt(sys.argv[1:], "p:", ["--port"])
 		parser.add_many(opts)
 	except getopt.GetoptError as err:
 		log.error("GetoptError: %s", err)
@@ -59,7 +57,6 @@ def main():
 		print("\nAttempting to gracefully shut down...")
 	finally:
 		server.stop()
-		loop.close()
 		print("Shutdown successul")
 
 

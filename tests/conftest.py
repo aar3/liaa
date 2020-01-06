@@ -1,14 +1,13 @@
 import os
 import random
 import hashlib
-import asyncio
 import struct
 import umsgpack
 
 import pytest
 
 # pylint: disable=bad-continuation
-from kademlia.protocol import RPCDatagramProtocol, Header
+from kademlia.protocol import Header
 from kademlia.network import Server
 from kademlia.node import Node, NodeType
 from kademlia.protocol import KademliaProtocol
@@ -30,7 +29,8 @@ def bootstrap_node(event_loop):
 # pylint: disable=redefined-outer-name
 @pytest.fixture()
 def mknode():
-	def _mknode(digest_id=None, ip_addy=None, port=None, intid=None):
+	# pylint: disable=invalid-name
+	def _mknode(digest_id=None, ip=None, port=None, intid=None):
 		"""
 		Make a node.  Created a random id if not specified.
 		"""
@@ -39,7 +39,7 @@ def mknode():
 		if not digest_id:
 			randbits = str(random.getrandbits(255))
 			digest_id = hashlib.sha1(randbits.encode()).digest()
-		return Node(digest_id, ip_addy, port)
+		return Node(digest_id, ip, port)
 	return _mknode
 
 

@@ -21,3 +21,5 @@
 - [enhancement] add tcp listener on server
    - remove Datagram abstraction
    - remove RPCMessageQueue abstraction
+### 1.5.19
+   - [refactor] remove config

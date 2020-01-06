@@ -28,8 +28,8 @@ class TestNode:
 		assert node_one.distance_to(node_two) == 0
 
 	def test_is_same_node(self, mknode):
-		node_one = mknode(ip_addy="0.0.0.0", port=0000)
-		node_two = mknode(ip_addy="0.0.0.0", port=0000)
+		node_one = mknode(ip="0.0.0.0", port=0000)
+		node_two = mknode(ip="0.0.0.0", port=0000)
 		assert node_one.is_same_node(node_two)
 
 	def test_node_iter(self, mknode):
