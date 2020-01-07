@@ -1,7 +1,7 @@
 import asyncio
 
 # pylint: disable=bad-continuation
-from kademlia.utils import (
+from liaa.utils import (
 	# digest,
 	shared_prefix,
 	bytes_to_bit_string,

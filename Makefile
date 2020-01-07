@@ -1,4 +1,4 @@
-.PHONY: clean doc dockerize freeze help lint prep-dev-fresh prep-dev-lock test
+.PHONY: clean doc freeze help lint prep-dev-fresh prep-dev-lock test
 
 SHELL := /bin/bash
 VIRTUALENV=/usr/local/bin/virtualenv
@@ -16,12 +16,6 @@ doc:
 	python && cd docs; make html
 	@echo "doc step finished"
 
-dockerize:
-	# @echo "pushing docker image to ralston3/kademlia:$(tagname)"
-	# docker build . && docker push ralston3/kademlia:$(tagname)
-	docker build . && docker push ralston3/kademlia:testv1
-	@echo "building docker image step finished"
-
 freeze:
 	python -m pip freeze > .requirements.lock
 	@echo "freeze step finished"
@@ -31,8 +25,6 @@ help:
 	@echo "	Remove local virtualenv"
 	@echo "doc"
 	@echo "  build sphinx documentation"
-	@echo "dockerize"
-	@echo "  build docker image"
 	@echo "freeze"
 	@echo "  Freeze pip requirements"
 	@echo "lint"
@@ -47,7 +39,7 @@ help:
 	@echo "  run tests on local machine (uses static python)"
 
 lint:
-	python -m pylint kademlia/
+	python -m pylint liaa/
 	@echo "lint step finished"
 
 prep-dev-fresh:

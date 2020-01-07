@@ -12,8 +12,8 @@ from collections.abc import Iterable
 from itertools import takewhile
 from typing import Any, List, Optional, Tuple
 
-from kademlia.node import Node, NodeType
-from kademlia.utils import hex_to_int_digest
+from liaa.node import Node, NodeType
+from liaa.utils import hex_to_int_digest
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -232,9 +232,9 @@ class DiskStorage(IStorage):
 		self.node = node
 		self.ttl = ttl
 
-		kstore_dir = os.path.join(os.path.expanduser("~"), ".kademlia")
+		kstore_dir = os.path.join(os.path.expanduser("~"), ".liaa")
 		if not os.path.exists(kstore_dir):
-			log.debug("Kademlia dir at %s not found, creating...", kstore_dir)
+			log.debug("Liaa dir at %s not found, creating...", kstore_dir)
 			os.mkdir(kstore_dir)
 
 		self.dir = os.path.join(kstore_dir, str(self.node.long_id))

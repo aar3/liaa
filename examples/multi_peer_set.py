@@ -23,9 +23,9 @@ import asyncio
 import sys
 import getopt
 
-from kademlia.network import Server
-from kademlia.node import Node, NodeType
-from kademlia.utils import rand_str, split_addr, ArgsParser, rand_digest_id
+from liaa.network import Server
+from liaa.node import Node, NodeType
+from liaa.utils import rand_str, split_addr, ArgsParser, rand_digest_id
 
 
 def usage():
@@ -43,7 +43,7 @@ def main():
 	handler = logging.StreamHandler()
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 	handler.setFormatter(formatter)
-	log = logging.getLogger('kademlia')
+	log = logging.getLogger('liaa')
 	log.addHandler(handler)
 	log.setLevel(logging.DEBUG)
 

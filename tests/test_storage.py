@@ -1,7 +1,7 @@
 import os
 import time
 
-from kademlia.storage import EphemeralStorage, DiskStorage
+from liaa.storage import EphemeralStorage, DiskStorage
 
 
 class TestEphemeralStorage:

@@ -12,10 +12,10 @@ from typing import Any, Dict, List, Tuple, Union, Optional
 import umsgpack
 
 
-from kademlia.node import Node, NodeType
-from kademlia.routing import RoutingTable
-from kademlia import __version__
-from kademlia.utils import join_addr, rand_digest_id
+from liaa.node import Node, NodeType
+from liaa.routing import RoutingTable
+from liaa import __version__
+from liaa.utils import join_addr, rand_digest_id
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -408,7 +408,7 @@ class HttpInterface(asyncio.Protocol):
 		# pylint: disable=bad-continuation
 		headers = [
 			f"HTTP/1.1 {msg} {code}",
-			f"User-Agent: kademlia.{__version__}",
+			f"User-Agent: Liaa.{__version__}",
 			"Accept: */*",
 			f"Content-Length: {len(body)}",
 			f"Content-Type: application/x-www-form-urlencoded",

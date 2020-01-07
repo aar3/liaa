@@ -3,8 +3,8 @@ import random
 
 import pytest
 
-from kademlia.routing import KBucket, TableTraverser, RoutingTable
-from kademlia.network import KademliaProtocol
+from liaa.routing import KBucket, TableTraverser, RoutingTable
+from liaa.network import KademliaProtocol
 
 class TestKBucket:
 	# pylint: disable=no-self-use

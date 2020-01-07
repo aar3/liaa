@@ -4,6 +4,7 @@ apidoc
 
 # build
 kademlia.egg-info
+liaa.egg-info
 build
 dist
 *.pyc

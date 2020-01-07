@@ -3,8 +3,8 @@ import asyncio
 import sys
 import getopt
 
-from kademlia.network import Server
-from kademlia.utils import ArgsParser, split_addr, str_arg_to_bool
+from liaa.network import Server
+from liaa.utils import ArgsParser, split_addr, str_arg_to_bool
 
 
 def usage():
@@ -22,7 +22,7 @@ def main():
 	handler = logging.StreamHandler()
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 	handler.setFormatter(formatter)
-	log = logging.getLogger('kademlia')
+	log = logging.getLogger('liaa')
 	log.addHandler(handler)
 	log.setLevel(logging.DEBUG)
 

@@ -2,8 +2,8 @@ import random
 import hashlib
 from collections.abc import Iterable
 
-from kademlia.node import Node, NodeHeap
-from kademlia.utils import hex_to_int
+from liaa.node import Node, NodeHeap
+from liaa.utils import hex_to_int
 
 
 class TestNode:

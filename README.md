@@ -1,13 +1,13 @@
-# Python Distributed Hash Table
+# Liaa 
+
+## A Python-based Distributed Hash Table
 [!This is a fork of bmuller's original repo!](https://github.com/bmuller/kademlia)
 
 [![Build Status](https://secure.travis-ci.org/ralston3/kademlia.png?branch=master)](https://travis-ci.org/ralston3/kademlia)
-[![Python version](https://img.shields.io/pypi/pyversions/kademlia)](https://pypi.org/project/kademlia/)
-[![Docs Status](https://readthedocs.org/projects/kademlia/badge/?version=latest)](http://kademlia.readthedocs.org)
-[![Codecov](https://img.shields.io/codecov/c/github/ralston3/kademlia)](https://coveralls.io/github/ralston3/kademlia?branch=master)
-![Repo Size](https://img.shields.io/github/repo-size/ralston3/kademlia)
+[![Python version](https://img.shields.io/pypi/pyversions/liaa)](https://pypi.org/project/liaa/)
+[![Codecov](https://img.shields.io/codecov/c/github/ralston3/liaa)](https://coveralls.io/github/ralston3/liaa?branch=master)
+![Repo Size](https://img.shields.io/github/repo-size/ralston3/liaa)
 
-**Documentation can be found at [kademlia.readthedocs.org](http://kademlia.readthedocs.org/).**
 
 This library is an asynchronous Python implementation of the [Kademlia distributed hash table](http://en.wikipedia.org/wiki/Kademlia).  It uses the [asyncio library](https://docs.python.org/3/library/asyncio.html) in Python 3 to provide asynchronous communication.  The nodes communicate using [RPC over UDP](https://github.com/bmuller/rpcudp) to communiate, meaning that it is capable of working behind a [NAT](http://en.wikipedia.org/wiki/Network_address_translation).
 
@@ -26,13 +26,13 @@ Assuming you want to connect to an existing network:
 
 ```python
 import asyncio
-from kademlia.network import Server
+from liaa.network import Server
 
 loop = asyncio.get_event_loop()
 
 # Create a node and start listening on port 5678
 node = Server()
-loop.run_until_complete(node.listen_udp(5678))
+loop.run_until_complete(node.listen(5678))
 
 # Bootstrap the node by connecting to other known nodes, in this case
 # replace 123.123.123.123 with the IP of another node and optionally
@@ -58,7 +58,7 @@ This library uses the standard [Python logging library](https://docs.python.org/
 ```python
 import logging
 
-log = logging.getLogger('kademlia')
+log = logging.getLogger('liaa')
 log.setLevel(logging.DEBUG)
 log.addHandler(logging.StreamHandler())
 ```

@@ -1,9 +1,8 @@
 import pytest
 
-from kademlia.crawling import SpiderCrawl
-from kademlia.network import KademliaProtocol
-from kademlia.node import NodeHeap
-
+from liaa.crawling import SpiderCrawl
+from liaa.network import KademliaProtocol
+from liaa.node import NodeHeap
 
 
 # pylint: disable=too-few-public-methods
@@ -30,5 +29,4 @@ class TestSpiderCrawl:
 	def test_find_returns_expected_result(self, mknode):
 		crawler = fake_spider_crawler(node=mknode())
 		assert len(crawler.last_ids_crawled) == 0
-		crawler.nearest.push([mknode(intid=i) for i in range(5)])	
-
+		crawler.nearest.push([mknode(intid=i) for i in range(5)])

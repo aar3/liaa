@@ -20,9 +20,9 @@ import asyncio
 import random
 import threading
 
-from kademlia.network import Server
-from kademlia.utils import rand_str, rand_digest_id
-from kademlia.node import Node, NodeType
+from liaa.network import Server
+from liaa.utils import rand_str, rand_digest_id
+from liaa.node import Node, NodeType
 
 
 HOST = "127.0.0.1"
@@ -51,7 +51,7 @@ def main():
 	handler = logging.StreamHandler()
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 	handler.setFormatter(formatter)
-	log = logging.getLogger('kademlia')
+	log = logging.getLogger('liaa')
 	log.addHandler(handler)
 	log.setLevel(logging.DEBUG)
 

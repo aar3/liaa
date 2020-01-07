@@ -14,12 +14,12 @@ RUN apt-get install -y \
    apt-transport-https \
    software-properties-common
 
-RUN mkdir -p /var/www/kademlia
-WORKDIR /var/www/kademlia
-COPY . /var/www/kademlia
+RUN mkdir -p /var/www/liaa
+WORKDIR /var/www/liaa
+COPY . /var/www/liaa
 
-ENV WORKDIR=/var/www/kademlia
-ENV APPDIR=$WORKDIR/kademlia
+ENV WORKDIR=/var/www/liaa
+ENV APPDIR=$WORKDIR/liaa
 
 RUN rm -rf ./venv
 RUN python3.7 -m pip install --upgrade virtualenv

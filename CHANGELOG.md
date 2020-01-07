@@ -23,3 +23,4 @@
 ### 1.5.19
    - [refactor] remove config
    - [enhancement] add Docker support
+   - [chore] rename project to `liaa` to avoid pypi namespace collisions

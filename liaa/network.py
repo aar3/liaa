@@ -4,11 +4,11 @@ import os
 import pickle
 from typing import List, Optional, Tuple
 
-from kademlia.crawling import NodeSpiderCrawl, ValueSpiderCrawl
-from kademlia.node import Node, NodeType
-from kademlia.protocol import KademliaProtocol, HttpInterface
-from kademlia.storage import StorageIface
-from kademlia.utils import int_to_digest, rand_digest_id
+from liaa.crawling import NodeSpiderCrawl, ValueSpiderCrawl
+from liaa.node import Node, NodeType
+from liaa.protocol import KademliaProtocol, HttpInterface
+from liaa.storage import StorageIface
+from liaa.utils import int_to_digest, rand_digest_id
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 

@@ -1,8 +1,8 @@
 import random
 import time
 
-from kademlia.protocol import KademliaProtocol
-from kademlia.storage import EphemeralStorage
+from liaa.protocol import KademliaProtocol
+from liaa.storage import EphemeralStorage
 
 
 class TestKademliaProtocol:

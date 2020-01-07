@@ -1,11 +1,11 @@
 import asyncio
 import os
 
-from kademlia.network import Server
-from kademlia.protocol import KademliaProtocol
-# from kademlia.node import Resource
-from kademlia.node import Node, NodeType
-from kademlia.utils import rand_str, rand_digest_id
+from liaa.network import Server
+from liaa.protocol import KademliaProtocol
+# from liaa.node import Resource
+from liaa.node import Node, NodeType
+from liaa.utils import rand_str, rand_digest_id
 
 
 PORT = 8765

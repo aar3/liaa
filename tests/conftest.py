@@ -7,19 +7,19 @@ import umsgpack
 import pytest
 
 # pylint: disable=bad-continuation
-from kademlia.protocol import Header
-from kademlia.network import Server
-from kademlia.node import Node, NodeType
-from kademlia.protocol import KademliaProtocol
-from kademlia.routing import RoutingTable, KBucket
-from kademlia.storage import StorageIface
-from kademlia.utils import rand_digest_id, rand_str
+from liaa.protocol import Header
+from liaa.network import Server
+from liaa.node import Node, NodeType
+from liaa.protocol import KademliaProtocol
+from liaa.routing import RoutingTable, KBucket
+from liaa.storage import StorageIface
+from liaa.utils import rand_digest_id, rand_str
 
 
 @pytest.yield_fixture
 def bootstrap_node(event_loop):
 	server = Server()
-	event_loop.run_until_complete(server.listen_udp(8468))
+	event_loop.run_until_complete(server.listen(8468))
 
 	try:
 		yield ('127.0.0.1', 8468)
