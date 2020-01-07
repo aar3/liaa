@@ -23,6 +23,8 @@ jobs:
     include:
       - stage: "Run pylint"
         script: make lint
+      - stage: "Build docker image and push"
+        script: make branch="${TRAVIS_BRANCH}:${TRAVIS_BUILD_NUMBER}" dockerize
       - stage: "Run test suite"
         script: make test
         after_success:

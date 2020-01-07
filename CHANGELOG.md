@@ -8,7 +8,6 @@
    - RPCMessageQueue
 ### 12.22.19
 - [enhancement] add CI support
-   - add Docker support
    - add travis support
    - add code coverage support
 - [enhancement] add logging
@@ -23,3 +22,4 @@
    - remove RPCMessageQueue abstraction
 ### 1.5.19
    - [refactor] remove config
+   - [enhancement] add Docker support
