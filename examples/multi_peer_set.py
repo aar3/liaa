@@ -68,7 +68,7 @@ def main():
 		print(usage())
 		sys.exit(1)
 
-	loop.run_until_complete(server.listen_udp(int(parser.get("-p", "--port"))))
+	loop.run_until_complete(server.listen(int(parser.get("-p", "--port"))))
 
 	host, port = split_addr(parser.get("-a", "--addr"))
 	loop.run_until_complete(server.bootstrap([(host, port)]))

@@ -40,8 +40,8 @@ class Server:
 		self.storage = StorageIface(self.node)
 		self.ksize = ksize
 		self.alpha = alpha
-		self.refresh_intv = kwargs.get("refresh_intv")
-		self.statefile = os.path.join(self.storage.dir, "state.dat")
+		self.refresh_interval = kwargs.get("refresh_interval")
+		self.statefile = os.path.join(self.storage.dir, "node.state")
 
 		self.udp_transport = None
 		self.protocol = None
@@ -82,54 +82,44 @@ class Server:
 		return self.protocol_class(self.node, self.storage, self.ksize)
 
 	def _create_http_iface(self) -> "HttpInterface":
+		"""
+		Create an interface to accept incoming http messages
+
+		Returns
+		-------
+			HttpInterface:
+				Bootstrapped instance of an HttpInterface
+		"""
 		return HttpInterface(self.node, self.storage)
 
-	async def listen_udp(self, port: int, interface: str = "0.0.0.0") -> None:
+	async def listen(self, port: int, interface: str = "0.0.0.0") -> None:
 		"""
-		Start our datagram endpoint listening on the given port
-		Provide interface="::" to accept ipv6 address
+		Create UDP and HTTP listeners on an interface at a given port
 
 		Parameters
 		----------
 			port: int
-				Port on which to listen
+				Port on which to bind inteface
 			interface: str
-				Interface on which to bind port (deafult = 0.0.0.0)
+				Interface on which to listen (default = 0.0.0.0)
 		"""
+		self.node.ip = interface
+		self.node.port = port
+
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
-												local_addr=(interface, port))
-
-		self.node.ip = interface
-		self.node.port = port
+															local_addr=(interface, port))
 		log.info("%s UDP listening at %s:%i", self.node, interface, port)
+
 		self.udp_transport, self.protocol = await listen
-		# finally, schedule refreshing table
+
+		# schedule refreshing table
 		self.refresh_table()
 
-	async def listen_http(self, port: int, interface: str = "0.0.0.0") -> None:
-		"""
-		Start our http endpoint listening on the given port
-		Provide interface="::" to accept ipv6 address
-
-		Parameters
-		----------
-			port: int
-				Port on which to listen
-			interface: str
-				Interface on which to bind port (deafult = 0.0.0.0)
-		"""
-		# if we are only using the http endpoint (and not the udp endpoint)
-		if not self.node.port:
-			self.node.port = port
-		if not self.node.ip:
-			self.node.ip = interface
-
-		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
 		self.listener = await loop.create_server(self._create_http_iface,
-													host=interface, port=port)
+																host=interface, port=port)
 		log.info("%s HTTP listening at %s:%i", self.node, interface, port)
 
 		asyncio.ensure_future(self.listener.serve_forever())
@@ -138,7 +128,7 @@ class Server:
 		"""
 		Refresh our routing table and save our server's state
 		"""
-		interval = self.refresh_intv or 3600
+		interval = self.refresh_interval or 10
 		log.debug("Refreshing routing table for %s", self.node)
 		asyncio.ensure_future(self._refresh_table())
 		loop = asyncio.get_event_loop()
@@ -348,7 +338,7 @@ class Server:
 		----------
 			fname: Optional[str]
 				File location where in which to write state
-					(default is state.dat file in storage directory)
+					(default is node.state file in storage directory)
 
 		Returns
 		-------
@@ -365,10 +355,7 @@ class Server:
 		return svr
 
 	# pylint: disable=bad-continuation
-	def save_state_regularly(self,
-		fname: Optional[str] = None,
-		frequency: int = 600
-	) -> None:
+	def save_state_regularly(self, fname: Optional[str] = None, frequency: int = 600) -> None:
 		"""
 		Save the state of node with a given regularity to the given
 		filename.
@@ -377,7 +364,7 @@ class Server:
 		----------
 			fname: Optional[str]
 				Location at which to save state regularly
-					(default is state.dat file in storage directory)
+					(default is node.state file in storage directory)
 			frequency: int
 				Frequency in seconds that the state should be saved. (default=10 mins)
 		"""

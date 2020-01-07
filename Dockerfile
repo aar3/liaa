@@ -20,13 +20,12 @@ COPY . /var/www/kademlia
 
 ENV WORKDIR=/var/www/kademlia
 ENV APPDIR=$WORKDIR/kademlia
-ENV PYTHONPATH=$PYTHONPATH:$APP_ROOT
 
 RUN rm -rf ./venv
 RUN python3.7 -m pip install --upgrade virtualenv
 RUN virtualenv -p $(which python3.7) ./venv
 ENV PATH="${WORKDIR}/venv/bin:${PATH}"
 
-RUN python -m pip install --upgrade -r requirements.lock
+RUN python -m pip install --upgrade -r .requirements.lock
 
-# run commmand
+CMD ["python", "app.py"]

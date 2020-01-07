@@ -23,9 +23,14 @@ jobs:
     include:
       - stage: "Run pylint"
         script: make lint
-      - stage: "Build docker image and push"
-        script: make branch="${TRAVIS_BRANCH}:${TRAVIS_BUILD_NUMBER}" dockerize
       - stage: "Run test suite"
         script: make test
         after_success:
             - codecov
+after_success:
+  - docker login -e $DOCKER_EMAIL -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+  - export REPOSITORY=ralston3/kademlia
+  - docker build -f ./Dockerfile -t $REPOSITORY:$COMMIT .
+  - docker tag $REPOSITORY:$COMMIT $REPOSITORY:$TRAVIS_BRANCH
+  - docker tag $REPOSITORY:$COMMIT $REPOSITORY:travis-$TRAVIS_BUILD_NUMBER
+  - docker push $REPOSITORY

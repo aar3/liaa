@@ -217,11 +217,7 @@ class EphemeralStorage(IStorage):
 
 class DiskStorage(IStorage):
 	# pylint: disable=bad-continuation
-	def __init__(self,
-		node: "Node",
-		kstore_dir: str = os.path.join(os.path.expanduser("~"), ".kademlia"),
-		ttl=604800
-		):
+	def __init__(self, node: "Node", ttl=604800):
 		"""
 		DiskStorage
 
@@ -229,19 +225,27 @@ class DiskStorage(IStorage):
 		----------
 			node: Node
 				The node representing this peer
-			kstore_dir: str
-				Directory at which all kademlia storage is placed
 			ttl: int
 				Max age that items can live untouched before being pruned
 				(default=604800 seconds = 1 week)
 		"""
 		self.node = node
 		self.ttl = ttl
-		self.dir = os.path.join(kstore_dir, str(self.node.long_id))
 
+		kstore_dir = os.path.join(os.path.expanduser("~"), ".kademlia")
+		if not os.path.exists(kstore_dir):
+			log.debug("Kademlia dir at %s not found, creating...", kstore_dir)
+			os.mkdir(kstore_dir)
+
+		self.dir = os.path.join(kstore_dir, str(self.node.long_id))
 		if not os.path.exists(self.dir):
-			log.debug("creating %s disk storage dir at %s", self.node, self.dir)
+			log.debug("Node dir at %s not found, creating...", self.dir)
 			os.mkdir(self.dir)
+
+		self.content_dir = os.path.join(self.dir, "content")
+		if not os.path.exists(self.content_dir):
+			log.debug("Node content dir at %s not found, creating...", self.content_dir)
+			os.mkdir(self.content_dir)
 
 	@pre_prune()
 	def get(self, hexkey: str, default: Optional[Any] = None) -> Optional["Node"]:
@@ -294,7 +298,7 @@ class DiskStorage(IStorage):
 				Hex value of node's long_id
 		"""
 		try:
-			fname = self.dir + "/" + hexkey
+			fname = os.path.join(self.content_dir, hexkey)
 			log.debug("%s removing resource %s", self.node, hexkey)
 			os.remove(fname)
 		except FileNotFoundError as err:
@@ -331,12 +335,17 @@ class DiskStorage(IStorage):
 		"""
 		List all nodes in storage
 
+		TODO: ideally, we shouldn't have to filter out the state file
+		like this, we should maybe keep all config/state files in the parent
+		directory, and the actual data files in a sub-directory
+
 		Returns
 		-------
 			List[str]:
 				Contents of storage directory
 		"""
-		return os.listdir(self.dir)
+		# up until -1 will prevent node.state from being loaded
+		return os.listdir(self.content_dir)
 
 	def _persist_data(self, node: "Node") -> None:
 		"""
@@ -347,7 +356,7 @@ class DiskStorage(IStorage):
 			node: Node
 				The node to save
 		"""
-		fname = os.path.join(self.dir, node.hex)
+		fname = os.path.join(self.content_dir, node.hex)
 		log.debug("%s attempting to persist %s", self.node, node.hex)
 		data = {"value": node.value, "time": time.monotonic()}
 		with open(fname, "wb") as ctx:
@@ -367,7 +376,7 @@ class DiskStorage(IStorage):
 			Optional[Any]:
 				Data if hexkey is found, else None
 		"""
-		fname = os.path.join(self.dir, hexkey)
+		fname = os.path.join(self.content_dir, hexkey)
 		log.debug("%s attempting to read resource node at %s", self.node, hexkey)
 		try:
 			with open(fname, "rb") as ctx:
@@ -386,7 +395,7 @@ class DiskStorage(IStorage):
 				List of (filename, last_modified_time) pairs
 		"""
 		def time_delta(hexkey: str) -> Tuple[str, float]:
-			path = os.path.join(self.dir, hexkey)
+			path = os.path.join(self.content_dir, hexkey)
 			statbuff = os.stat(path)
 			diff = dt.datetime.fromtimestamp(time.time()) - dt.datetime.fromtimestamp(statbuff.st_mtime)
 			return hexkey, diff.seconds

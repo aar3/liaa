@@ -90,6 +90,7 @@ class TestDiskStorage:
 		storage = DiskStorage(node)
 
 		assert os.path.exists(storage.dir)
+		assert os.path.exists(storage.content_dir)
 
 	def test_can_set_and_retrieve_basic_resource(self, mknode, mkrsrc):
 		node = mknode()

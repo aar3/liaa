@@ -17,7 +17,9 @@ doc:
 	@echo "doc step finished"
 
 dockerize:
-	docker build -f ./Dockerfile && docker push ralston3/kademlia:$(tagname)
+	# @echo "pushing docker image to ralston3/kademlia:$(tagname)"
+	# docker build . && docker push ralston3/kademlia:$(tagname)
+	docker build . && docker push ralston3/kademlia:testv1
 	@echo "building docker image step finished"
 
 freeze:

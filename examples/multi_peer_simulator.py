@@ -35,7 +35,7 @@ def run_server(loop, server, port, bootstrap_port):
 	Start a given server on a given port using a given event loop
 	"""
 	loop.set_debug(True)
-	loop.run_until_complete(server.listen_udp(port))
+	loop.run_until_complete(server.listen(port))
 
 	loop.run_until_complete(server.bootstrap([(HOST, bootstrap_port)]))
 

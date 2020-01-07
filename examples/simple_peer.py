@@ -1,10 +1,14 @@
-# simple_peer_http.py
+# simple_peer.py
 #
-# Same as examples/simple_peer_udp.py but using http
+# In this example, we demonstrate how we can simply create a peer's server,
+# and listen for incoming connections. Note that this example by itself won't
+# do much other than instantiate a peer and its storage.
+#
+# This example can be used in tandem with examples/multi_peer_set.py
 #
 # Example
 # -------
-# python examples/simple_peer_http.py -p 8000
+# python examples/simple_peer.py -p 8000
 
 import logging
 import asyncio
@@ -17,7 +21,7 @@ from kademlia.utils import ArgsParser
 
 def usage():
 	return """
-Usage: python network.py -p [port]
+Usage: python simple_peer.py -p [port]
 -p --port
 	Port on which to listen (e.g., 8000)
 	"""
@@ -49,7 +53,7 @@ def main():
 		sys.exit(1)
 
 	server = Server()
-	loop.run_until_complete(server.listen_http(int(parser.get("-p", "--port"))))
+	loop.run_until_complete(server.listen(int(parser.get("-p", "--port"))))
 
 	try:
 		loop.run_forever()
@@ -57,6 +61,7 @@ def main():
 		print("\nAttempting to gracefully shut down...")
 	finally:
 		server.stop()
+		loop.close()
 		print("Shutdown successul")
 
 

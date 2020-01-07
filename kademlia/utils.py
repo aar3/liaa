@@ -245,3 +245,20 @@ class ArgsParser:
 		def has_arg(arg):
 			return arg[0] in self._data or arg[1] in self._data
 		return all(map(has_arg, required)), "missing required opts"
+
+
+def str_arg_to_bool(arg: str) -> Union[bool, str]:
+	"""
+	Convert string cli arg to boolean
+
+	Parameters
+	----------
+		arg: str
+			Arg to be converted
+
+	Returns
+	-------
+		Union[bool, str]:
+			bool if arg is false else original arg
+	"""
+	return False if arg.lower() == 'false' else arg
