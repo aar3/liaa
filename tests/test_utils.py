@@ -2,7 +2,6 @@ import asyncio
 
 # pylint: disable=bad-continuation
 from liaa.utils import (
-	# digest,
 	shared_prefix,
 	bytes_to_bit_string,
 	hex_to_int,
@@ -20,13 +19,6 @@ from liaa.utils import (
 
 
 class TestUtils:
-	# pylint: disable=no-self-use
-	# def test_digest(self):
-	# 	dig = hashlib.sha1(b'1').digest()
-	# 	assert dig == digest(1)
-
-	# 	dig = hashlib.sha1(b'another').digest()
-	# 	assert dig == digest('another')
 
 	def test_shared_prefix(self):
 		args = ['prefix', 'prefixasdf', 'prefix', 'prefixxxx']
