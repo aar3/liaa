@@ -24,3 +24,5 @@
    - [refactor] remove config
    - [enhancement] add Docker support
    - [chore] rename project to `liaa` to avoid pypi namespace collisions
+   - [enhancement] continue refactoring ci pipeline
+      - CI filter `${TRAVIS_PULL_REQUEST_BRANCH:-$TRAVIS_BRANCH} =~ ^v(\d+)\.(\d+)\.(\d+)$`
