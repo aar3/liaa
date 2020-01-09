@@ -3,13 +3,15 @@
 ## A Python-based Distributed Hash Table
 [!This is a fork of bmuller's original repo!](https://github.com/bmuller/kademlia)
 
-[![Build Status](https://secure.travis-ci.org/ralston3/kademlia.png?branch=master)](https://travis-ci.org/ralston3/kademlia)
+[![Build Status](https://secure.travis-ci.org/ralston3/liaa.png?branch=master)](https://travis-ci.org/ralston3/liaa)
 [![Python version](https://img.shields.io/pypi/pyversions/liaa)](https://pypi.org/project/liaa/)
-[![Codecov](https://img.shields.io/codecov/c/github/ralston3/liaa)](https://coveralls.io/github/ralston3/liaa?branch=master)
+![Codecov branch](https://img.shields.io/codecov/c/github/ralston3/liaa/master?color=purple)
+![GitHub issues](https://img.shields.io/github/issues/ralston3/liaa?color=red)
 ![Repo Size](https://img.shields.io/github/repo-size/ralston3/liaa)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/w/ralston3/liaa)
+![GitHub](https://img.shields.io/github/license/ralston3/liaa)
 
-
-This library is an asynchronous Python implementation of the [Kademlia distributed hash table](http://en.wikipedia.org/wiki/Kademlia).  It uses the [asyncio library](https://docs.python.org/3/library/asyncio.html) in Python 3 to provide asynchronous communication.  The nodes communicate using [RPC over UDP](https://github.com/bmuller/rpcudp) to communiate, meaning that it is capable of working behind a [NAT](http://en.wikipedia.org/wiki/Network_address_translation).
+This library is an asynchronous Python implementation of the [Kademlia distributed hash table](http://en.wikipedia.org/wiki/Kademlia).  It uses the [asyncio library](https://docs.python.org/3/library/asyncio.html) in Python 3 to provide asynchronous communication.  The nodes communicate using [RPC over UDP]() to communiate, meaning that it is capable of working behind a [NAT](http://en.wikipedia.org/wiki/Network_address_translation).
 
 This library aims to be as close to a reference implementation of the [Kademlia paper](http://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf) as possible.
 
