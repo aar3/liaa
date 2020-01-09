@@ -20,6 +20,7 @@ from liaa.utils import (
 
 class TestUtils:
 
+	# pylint: disable=no-self-use
 	def test_shared_prefix(self):
 		args = ['prefix', 'prefixasdf', 'prefix', 'prefixxxx']
 		assert shared_prefix(args) == 'prefix'
@@ -123,6 +124,7 @@ class TestUtils:
 		assert hex_to_int_digest(hexval) == int_to_digest(num)
 
 class TestArgsParser:
+
 	# pylint: disable=no-self-use
 	def test_can_set_and_get_via_primary_flag(self):
 		parser = ArgsParser()

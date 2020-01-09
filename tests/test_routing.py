@@ -27,9 +27,9 @@ class TestKBucket:
 		fetched = bucket.get_nodes()
 		assert len(fetched) == 2
 
-	def test_replacement_nodes_are_excess_pushed_nodes(self, mknode):
+	def test_nodes_past_k_are_pushed_to_replacement(self, mknode):
 		k = 3
-		bucket = KBucket(0, 10, k)
+		bucket = KBucket(0, 10, 3)
 		nodes = [mknode() for _ in range(10)]
 		for node in nodes:
 			bucket.add_node(node)
