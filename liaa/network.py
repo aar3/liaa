@@ -109,7 +109,7 @@ class Server:
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
-															local_addr=(interface, port))
+												local_addr=(interface, port))
 		log.info("%s UDP listening at %s:%i", self.node, interface, port)
 
 		self.udp_transport, self.protocol = await listen
@@ -119,7 +119,7 @@ class Server:
 
 		# pylint: disable=bad-continuation
 		self.listener = await loop.create_server(self._create_http_iface,
-																host=interface, port=port)
+												host=interface, port=port)
 		log.info("%s HTTP listening at %s:%i", self.node, interface, port)
 
 		asyncio.ensure_future(self.listener.serve_forever())
@@ -301,6 +301,7 @@ class Server:
 		if self.node.distance_to(node) < biggest:
 			self.storage.set(node)
 		results = [self.protocol.call_store(n, node.digest_id, node.value) for n in nodes]
+
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
 
@@ -316,6 +317,7 @@ class Server:
 		"""
 		fname = fname or self.statefile
 		log.info("%s saving state to %s", self.node, fname)
+
 		# pylint: disable=bad-continuation
 		data = {
 			'ksize': self.ksize,
@@ -323,9 +325,11 @@ class Server:
 			'id': self.node.digest_id,
 			'neighbors': self.bootstrappable_neighbors()
 		}
+
 		if not data['neighbors']:
 			log.warning("%s has no known neighbors, so not writing to cache.", self.node)
 			return
+
 		with open(fname, 'wb') as file:
 			pickle.dump(data, file)
 
@@ -347,11 +351,15 @@ class Server:
 		"""
 		fname = fname or self.statefile
 		log.info("%i loading state from %s", self.node, fname)
+
 		with open(fname, 'rb') as file:
 			data = pickle.load(file)
+
 		svr = Server(data['id'], ksize=data['ksize'], alpha=data['alpha'])
+
 		if data['neighbors']:
 			asyncio.ensure_future(svr.bootstrap(data['neighbors']))
+
 		return svr
 
 	# pylint: disable=bad-continuation
@@ -371,6 +379,7 @@ class Server:
 		fname = fname or self.statefile
 		self.save_state(fname)
 		loop = asyncio.get_event_loop()
+
 		# pylint: disable=bad-continuation
 		self.save_state_loop = loop.call_later(frequency,
 												self.save_state_regularly,
