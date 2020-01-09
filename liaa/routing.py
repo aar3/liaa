@@ -5,7 +5,7 @@ import asyncio
 
 from itertools import chain
 from collections import OrderedDict
-from kademlia.utils import shared_prefix, bytes_to_bit_string
+from liaa.utils import shared_prefix, bytes_to_bit_string
 
 
 class KBucket:

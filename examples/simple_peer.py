@@ -1,23 +1,27 @@
-# simple_peer_http.py
+# simple_peer.py
 #
-# Same as examples/simple_peer_udp.py but using http
+# In this example, we demonstrate how we can simply create a peer's server,
+# and listen for incoming connections. Note that this example by itself won't
+# do much other than instantiate a peer and its storage.
+#
+# This example can be used in tandem with examples/multi_peer_set.py
 #
 # Example
 # -------
-# python examples/simple_peer_http.py -p 8000
+# python examples/simple_peer.py -p 8000
 
 import logging
 import asyncio
 import sys
 import getopt
 
-from kademlia.network import Server
-from kademlia.utils import ArgsParser
+from liaa.network import Server
+from liaa.utils import ArgsParser
 
 
 def usage():
 	return """
-Usage: python network.py -p [port]
+Usage: python simple_peer.py -p [port]
 -p --port
 	Port on which to listen (e.g., 8000)
 	"""
@@ -27,7 +31,7 @@ def main():
 	handler = logging.StreamHandler()
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 	handler.setFormatter(formatter)
-	log = logging.getLogger('kademlia')
+	log = logging.getLogger('liaa')
 	log.addHandler(handler)
 	log.setLevel(logging.DEBUG)
 
@@ -37,9 +41,7 @@ def main():
 	parser = ArgsParser()
 
 	try:
-		args = "p:"
-		long_args = ["--port"]
-		opts, args = getopt.getopt(sys.argv[1:], args, long_args)
+		opts, _ = getopt.getopt(sys.argv[1:], "p:", ["--port"])
 		parser.add_many(opts)
 	except getopt.GetoptError as err:
 		log.error("GetoptError: %s", err)
@@ -51,7 +53,7 @@ def main():
 		sys.exit(1)
 
 	server = Server()
-	loop.run_until_complete(server.listen_http(int(parser.get("-p", "--port"))))
+	loop.run_until_complete(server.listen(int(parser.get("-p", "--port"))))
 
 	try:
 		loop.run_forever()

@@ -4,12 +4,11 @@ import os
 import pickle
 from typing import List, Optional, Tuple
 
-from kademlia.config import CONFIG
-from kademlia.crawling import NodeSpiderCrawl, ValueSpiderCrawl
-from kademlia.node import Node, NodeType
-from kademlia.protocol import KademliaProtocol, HttpInterface
-from kademlia.storage import StorageIface
-from kademlia.utils import int_to_digest, rand_digest_id
+from liaa.crawling import NodeSpiderCrawl, ValueSpiderCrawl
+from liaa.node import Node, NodeType
+from liaa.protocol import KademliaProtocol, HttpInterface
+from liaa.storage import StorageIface
+from liaa.utils import int_to_digest, rand_digest_id
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -21,9 +20,7 @@ class Server:
 
 	# pylint: disable=bad-continuation
 	def __init__(self,
-		node_id: Optional[bytes] = None,
-		ksize: int = CONFIG.ksize,
-		alpha: int = CONFIG.alpha):
+		node_id: Optional[bytes] = None, ksize: int = 20, alpha: int = 3, **kwargs):
 		"""
 		High level view of a node instance.  This is the object that should be
 		created to start listening as an active node on the network.
@@ -34,15 +31,17 @@ class Server:
 			node_id: Optional[bytes]
 				The id for this node on the network.
 			ksize: int
-				The k parameter from the paper (default from config)
+				The k parameter from the paper (default = 20)
 			alpha: int
-				The alpha parameter from the paper (default from config)
+				The alpha parameter from the paper (default = 3)
 		"""
 		self.node = Node(node_id if node_id else rand_digest_id())
 		log.info("Using storage interface: %s", StorageIface.__name__)
 		self.storage = StorageIface(self.node)
 		self.ksize = ksize
 		self.alpha = alpha
+		self.refresh_interval = kwargs.get("refresh_interval")
+		self.statefile = os.path.join(self.storage.dir, "node.state")
 
 		self.udp_transport = None
 		self.protocol = None
@@ -69,7 +68,7 @@ class Server:
 
 		if self.listener:
 			log.info("Closing %s server...", self.node)
-			self.listener.close()
+			asyncio.ensure_future(self.listener.wait_closed())
 
 	def _create_protocol(self) -> "KademliaProtocol":
 		"""
@@ -83,68 +82,58 @@ class Server:
 		return self.protocol_class(self.node, self.storage, self.ksize)
 
 	def _create_http_iface(self) -> "HttpInterface":
+		"""
+		Create an interface to accept incoming http messages
+
+		Returns
+		-------
+			HttpInterface:
+				Bootstrapped instance of an HttpInterface
+		"""
 		return HttpInterface(self.node, self.storage)
 
-	async def listen_udp(self,
-		port: Optional[int] = None,
-		interface: Optional[str] = None) -> None:
+	async def listen(self, port: int, interface: str = "0.0.0.0") -> None:
 		"""
-		Start our datagram endpoint listening on the given port
-		Provide interface="::" to accept ipv6 address
+		Create UDP and HTTP listeners on an interface at a given port
 
 		Parameters
 		----------
-			port: Optional[int]
-				Port on which to listen
-			interface: Optional[str]
-				Interface on which to bind port
+			port: int
+				Port on which to bind inteface
+			interface: str
+				Interface on which to listen (default = 0.0.0.0)
 		"""
-		port = port or CONFIG.port
-		interface = interface or CONFIG.interface
+		self.node.ip = interface
+		self.node.port = port
+
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
-												local_addr=(interface, port))
-
-		self.node.ip = interface
-		self.node.port = port
+															local_addr=(interface, port))
 		log.info("%s UDP listening at %s:%i", self.node, interface, port)
+
 		self.udp_transport, self.protocol = await listen
-		# finally, schedule refreshing table
+
+		# schedule refreshing table
 		self.refresh_table()
 
-	async def listen_http(self, port=None, interface=None):
-		port = port or CONFIG.port
-		interface = interface or CONFIG.interface
-
-		# if we are only using the http endpoint (and not the udp endpoint)
-		if not self.node.port:
-			self.node.port = port
-		if not self.node.ip:
-			self.node.ip = interface
-
-		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
 		self.listener = await loop.create_server(self._create_http_iface,
-													host=interface, port=port)
+																host=interface, port=port)
 		log.info("%s HTTP listening at %s:%i", self.node, interface, port)
 
 		asyncio.ensure_future(self.listener.serve_forever())
 
-	def refresh_table(self, delay: int = CONFIG.refresh_table) -> None:
+	def refresh_table(self) -> None:
 		"""
 		Refresh our routing table and save our server's state
-
-		Parameters
-		----------
-			delay: int
-				Time to wait (secs) before executing future (default = set in config)
 		"""
+		interval = self.refresh_interval or 10
 		log.debug("Refreshing routing table for %s", self.node)
 		asyncio.ensure_future(self._refresh_table())
 		loop = asyncio.get_event_loop()
-		self.refresh_loop = loop.call_later(delay, self.refresh_table)
-		self.save_state_loop = loop.call_later(delay, self.save_state_regularly)
+		self.refresh_loop = loop.call_later(interval, self.refresh_table)
+		self.save_state_loop = loop.call_later(interval, self.save_state_regularly)
 
 	async def _refresh_table(self) -> None:
 		"""
@@ -186,7 +175,7 @@ class Server:
 		neighbors: List["Node"] = self.protocol.router.find_neighbors(self.node)
 		return [tuple(n)[-2:] for n in neighbors]
 
-	async def bootstrap(self, addrs) -> asyncio.Future:
+	async def bootstrap(self, addrs: List[Tuple[str, int]]) -> asyncio.Future:
 		"""
 		Bootstrap the server by connecting to other known nodes in the network.
 
@@ -315,7 +304,7 @@ class Server:
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
 
-	def save_state(self, fname: str) -> None:
+	def save_state(self, fname: Optional[str] = None) -> None:
 		"""
 		Save the state of this node (the alpha/ksize/id/immediate neighbors)
 		to a cache file with the given fname.
@@ -325,6 +314,7 @@ class Server:
 			fname: strtest_can_set_and_get
 				File location where in which to write state
 		"""
+		fname = fname or self.statefile
 		log.info("%s saving state to %s", self.node, fname)
 		# pylint: disable=bad-continuation
 		data = {
@@ -339,45 +329,46 @@ class Server:
 		with open(fname, 'wb') as file:
 			pickle.dump(data, file)
 
-	def load_state(self, fname: str = CONFIG.state_file) -> "Server":
+	def load_state(self, fname: Optional[str] = None) -> "Server":
 		"""
 		Load the state of this node (the alpha/ksize/id/immediate neighbors)
 		from a cache file with the given fname.
 
 		Parameters
 		----------
-			fname: str
+			fname: Optional[str]
 				File location where in which to write state
+					(default is node.state file in storage directory)
 
 		Returns
 		-------
 			Server:
 				Parameterized instance of a Server
 		"""
+		fname = fname or self.statefile
 		log.info("%i loading state from %s", self.node, fname)
 		with open(fname, 'rb') as file:
 			data = pickle.load(file)
-		svr = Server(data['ksize'], data['alpha'], data['id'])
+		svr = Server(data['id'], ksize=data['ksize'], alpha=data['alpha'])
 		if data['neighbors']:
-			svr.bootstrap(data['neighbors'])
+			asyncio.ensure_future(svr.bootstrap(data['neighbors']))
 		return svr
 
 	# pylint: disable=bad-continuation
-	def save_state_regularly(self,
-		fname: str = CONFIG.state_file,
-		frequency: int = 600) -> None:
+	def save_state_regularly(self, fname: Optional[str] = None, frequency: int = 600) -> None:
 		"""
 		Save the state of node with a given regularity to the given
 		filename.
 
 		Parameters
 		----------
-			fname: str
-				File name to save retularly to
+			fname: Optional[str]
+				Location at which to save state regularly
+					(default is node.state file in storage directory)
 			frequency: int
 				Frequency in seconds that the state should be saved. (default=10 mins)
 		"""
-		fname = os.path.join(CONFIG.persist_dir, f"{self.node.long_id}-state.dat")
+		fname = fname or self.statefile
 		self.save_state(fname)
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation

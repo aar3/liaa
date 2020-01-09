@@ -20,9 +20,9 @@ import asyncio
 import random
 import threading
 
-from kademlia.network import Server
-from kademlia.utils import rand_str, rand_digest_id
-from kademlia.node import Node, NodeType
+from liaa.network import Server
+from liaa.utils import rand_str, rand_digest_id
+from liaa.node import Node, NodeType
 
 
 HOST = "127.0.0.1"
@@ -35,7 +35,7 @@ def run_server(loop, server, port, bootstrap_port):
 	Start a given server on a given port using a given event loop
 	"""
 	loop.set_debug(True)
-	loop.run_until_complete(server.listen_udp(port))
+	loop.run_until_complete(server.listen(port))
 
 	loop.run_until_complete(server.bootstrap([(HOST, bootstrap_port)]))
 
@@ -51,7 +51,7 @@ def main():
 	handler = logging.StreamHandler()
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 	handler.setFormatter(formatter)
-	log = logging.getLogger('kademlia')
+	log = logging.getLogger('liaa')
 	log.addHandler(handler)
 	log.setLevel(logging.DEBUG)
 

@@ -11,11 +11,11 @@ from typing import Any, Dict, List, Tuple, Union, Optional
 
 import umsgpack
 
-from kademlia.config import CONFIG
-from kademlia.node import Node, NodeType
-from kademlia.routing import RoutingTable
-from kademlia import __version__
-from kademlia.utils import join_addr, rand_digest_id
+
+from liaa.node import Node, NodeType
+from liaa.routing import RoutingTable
+from liaa import __version__
+from liaa.utils import join_addr, rand_digest_id
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -255,7 +255,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		def func(address, *args):
 			msg_id = hashlib.sha1(os.urandom(32)).digest()
 			data = umsgpack.packb([name, args])
-			if len(data) > CONFIG.max_payload_size:
+			if len(data) > 8192:
 				raise MalformedMessage("Total length of function name and arguments cannot exceed 8K")
 			txdata = Header.Request + msg_id + data
 
@@ -386,6 +386,7 @@ class HttpInterface(asyncio.Protocol):
 		return self.pack_response(404, "NOT FOUND",
 				json.dumps({"details": "Not found", "data": str(node)}))
 
+	# pylint: disable=no-self-use
 	def pack_response(self, code: int, msg: str, body: Dict[str, str]) -> str:
 		"""
 		Pack a response's parts into an HTTP message
@@ -404,15 +405,16 @@ class HttpInterface(asyncio.Protocol):
 			str:
 				String-formatted response
 		"""
-		response = f"HTTP/1.1 {code} {msg}\r\n"\
-			f"Host: {self.source_node.ip}:{self.source_node.port}\r\n"\
-			f"User-Agent: kademlia.{__version__}\r\n"\
-			"Accept: */*\r\n"\
-			f"Content-Length: {len(body)}\r\n"\
-			f"Content-Type: application/x-www-form-urlencoded\r\n\r\n"\
-			f"{body}"
+		# pylint: disable=bad-continuation
+		headers = [
+			f"HTTP/1.1 {msg} {code}",
+			f"User-Agent: Liaa.{__version__}",
+			"Accept: */*",
+			f"Content-Length: {len(body)}",
+			f"Content-Type: application/x-www-form-urlencoded",
+		]
 
-		return response
+		return "\r\n".join(headers) + "\r\n\r\n" + body
 
 class KademliaProtocol(RPCDatagramProtocol):
 	# pylint: disable=no-self-use,bad-continuation

@@ -1,29 +1,20 @@
-# simple_peer_udp.py
-#
-# In this example, we demonstrate how we can simply create a peer's server,
-# and listen for incoming connections. Note that this example by itself won't
-# do much other than instantiate a peer and its storage.
-#
-# This example can be used in tandem with examples/multi_peer_set.py
-#
-# Example
-# -------
-# python examples/simple_peer_udp.py -p 8000
-
 import logging
 import asyncio
 import sys
 import getopt
 
-from kademlia.network import Server
-from kademlia.utils import ArgsParser
+from liaa.network import Server
+from liaa.utils import ArgsParser, split_addr, str_arg_to_bool
 
 
 def usage():
 	return """
-Usage: python network.py -p [port]
+Usage: python app.py -p [port] -n [bootstrap neighbors]
 -p --port
 	Port on which to listen (e.g., 8000)
+-n --neighbors
+	Neighbors with which to bootstrap (e.g., 177.91.19.1:8000,178.31.13.21:9876)
+		or 'False' if not passing an args
 	"""
 
 def main():
@@ -31,7 +22,7 @@ def main():
 	handler = logging.StreamHandler()
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 	handler.setFormatter(formatter)
-	log = logging.getLogger('kademlia')
+	log = logging.getLogger('liaa')
 	log.addHandler(handler)
 	log.setLevel(logging.DEBUG)
 
@@ -41,9 +32,7 @@ def main():
 	parser = ArgsParser()
 
 	try:
-		args = "p:"
-		long_args = ["--port"]
-		opts, args = getopt.getopt(sys.argv[1:], args, long_args)
+		opts, _ = getopt.getopt(sys.argv[1:], "p:n:", ["--port", "--neighbors"])
 		parser.add_many(opts)
 	except getopt.GetoptError as err:
 		log.error("GetoptError: %s", err)
@@ -55,7 +44,12 @@ def main():
 		sys.exit(1)
 
 	server = Server()
-	loop.run_until_complete(server.listen_udp(int(parser.get("-p", "--port"))))
+	loop.run_until_complete(server.listen(int(parser.get("-p", "--port"))))
+
+	bootstrap_peers = str_arg_to_bool(parser.get("-n", "--neighbors"))
+	if bootstrap_peers:
+		bootstrap_peers = bootstrap_peers.split(",")
+		loop.run_until_complete(server.bootstrap(list(map(split_addr, bootstrap_peers))))
 
 	try:
 		loop.run_forever()
@@ -63,7 +57,6 @@ def main():
 		print("\nAttempting to gracefully shut down...")
 	finally:
 		server.stop()
-		loop.close()
 		print("Shutdown successul")
 
 

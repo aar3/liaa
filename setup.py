@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 from setuptools import setup, find_packages
-import kademlia
+import liaa
 
 # pylint: disable=bad-continuation
 setup(
-		name="kademlia",
-		version=kademlia.__version__,
+		name="liaa",
+		version=liaa.__version__,
 		# pylint: disable=line-too-long
-		description="Kademlia is a distributed hash table for decentralized peer-to-peer computer networks.",
+		description="Liaa is a distributed hash table for decentralized peer-to-peer computer networks.",
 		long_description=open("README.md", encoding='utf-8').read(),
 		long_description_content_type='text/markdown',
 		author="Brian Muller, Rashad Alston",
 		author_email="bamuller@gmail.com, rashadalston@gmail.com",
 		license="MIT",
-		url="http://github.com/bmuller/kademlia",
+		url="http://github.com/ralston3/liaa",
 		packages=find_packages(),
 		install_requires=open("requirements.txt").readlines(),
 		classifiers=[

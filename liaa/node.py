@@ -3,7 +3,7 @@ import heapq
 import logging
 from typing import Optional, List, Any
 
-from kademlia.utils import hex_to_int, check_dht_value_type, digest_to_int
+from liaa.utils import hex_to_int, check_dht_value_type, digest_to_int
 
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name

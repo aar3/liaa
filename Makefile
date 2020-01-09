@@ -39,7 +39,7 @@ help:
 	@echo "  run tests on local machine (uses static python)"
 
 lint:
-	python -m pylint kademlia/
+	python -m pylint liaa/
 	@echo "lint step finished"
 
 prep-dev-fresh:

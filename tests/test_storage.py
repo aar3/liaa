@@ -1,8 +1,7 @@
 import os
 import time
 
-from kademlia.storage import EphemeralStorage, DiskStorage
-from kademlia.config import CONFIG
+from liaa.storage import EphemeralStorage, DiskStorage
 
 
 class TestEphemeralStorage:
@@ -48,14 +47,14 @@ class TestDiskStorage:
 	# pylint: disable=no-self-use
 	def test_instantiation(self, mknode):
 		node = mknode()
-		storage = DiskStorage(node=node)
+		storage = DiskStorage(node)
 
 		assert isinstance(storage, DiskStorage)
 		assert len(storage) == 0
 
 	def test_store_contents(self, mknode, mkrsrc):
 		node = mknode()
-		storage = DiskStorage(node=node)
+		storage = DiskStorage(node)
 
 		resource = mkrsrc()
 		storage.set(resource)
@@ -65,7 +64,7 @@ class TestDiskStorage:
 
 	def test_remove_works_ok(self, mknode, mkrsrc):
 		node = mknode()
-		storage = DiskStorage(node=node)
+		storage = DiskStorage(node)
 
 		resource = mkrsrc()
 		storage.set(resource)
@@ -77,7 +76,7 @@ class TestDiskStorage:
 
 	def test_load_data_returns_proper_payload(self, mknode, mkrsrc):
 		node = mknode()
-		storage = DiskStorage(node=node)
+		storage = DiskStorage(node)
 
 		resource = mkrsrc()
 		storage.set(resource)
@@ -88,15 +87,14 @@ class TestDiskStorage:
 
 	def test_persist_dir_exists(self, mknode):
 		node = mknode()
-		storage = DiskStorage(node=node)
+		storage = DiskStorage(node)
 
-		# have to call config's getter to instantiate dir
-		assert os.path.exists(CONFIG.persist_dir)
 		assert os.path.exists(storage.dir)
+		assert os.path.exists(storage.content_dir)
 
 	def test_can_set_and_retrieve_basic_resource(self, mknode, mkrsrc):
 		node = mknode()
-		storage = DiskStorage(node=node)
+		storage = DiskStorage(node)
 		resource = mkrsrc()
 
 		storage.set(resource)
@@ -109,7 +107,7 @@ class TestDiskStorage:
 		node = mknode()
 
 		# instantiate disk storage with 5 seconds ttl
-		storage = DiskStorage(node=node, ttl=3)
+		storage = DiskStorage(node, ttl=3)
 
 		# create some resources
 		# pylint: disable=invalid-name

@@ -3,9 +3,9 @@ from collections import Counter
 import asyncio
 from typing import List, Any, Dict
 
-from kademlia.node import NodeHeap
-from kademlia.protocol import RPCFindResponse
-from kademlia.utils import gather_dict
+from liaa.node import NodeHeap
+from liaa.protocol import RPCFindResponse
+from liaa.utils import gather_dict
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
