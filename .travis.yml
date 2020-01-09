@@ -34,15 +34,16 @@ jobs:
         - docker login --username $DOCKER_USERNAME --password $DOCKER_PASSWORD
         - export REPOSITORY=ralston3/liaa
         - docker build -f ./Dockerfile -t $REPOSITORY:$COMMIT-travis-$TRAVIS_BUILD_NUMBER .
-        on:
-          all_branches: true
-          condition: ${TRAVIS_PULL_REQUEST_BRANCH:-$TRAVIS_BRANCH} =~ ^v(\d+)\.(\d+)\.(\d+)$
+        # on:
+        #   all_branches: true
+          # condition: ${TRAVIS_PULL_REQUEST_BRANCH:-$TRAVIS_BRANCH} =~ ^v(\d+)\.(\d+)\.(\d+)$
         after_success:
           - docker push $REPOSITORY:$COMMIT-travis-$TRAVIS_BUILD_NUMBER
 
     - stage: "Pypi: Push"
       script:
       - python -m twine upload -u $PYPI_USERNAME -p $PYPI_PASSWORD dist/*
-      on:
-        all_branches: true
-        condition: ${TRAVIS_PULL_REQUEST_BRANCH:-$TRAVIS_BRANCH} =~ ^v(\d+)\.(\d+)\.(\d+)$
+      # on:
+      #   all_branches: true
+        # condition: ${TRAVIS_PULL_REQUEST_BRANCH:-$TRAVIS_BRANCH} =~ ^v(\d+)\.(\d+)\.(\d+)$
+        
