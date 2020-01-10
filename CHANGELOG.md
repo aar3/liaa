@@ -24,3 +24,6 @@
    - [refactor] remove config
    - [enhancement] add Docker support
    - [chore] rename project to `liaa` to avoid pypi namespace collisions
+   - [bugfix] ensure crawler working properly (ISSUE-28)
+      - remove docs
+      - update CI to push on version branches and master

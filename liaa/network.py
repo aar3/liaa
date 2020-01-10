@@ -267,7 +267,7 @@ class Server:
 				Callback to set_digest which finds nodes on which to store key
 		"""
 		if not node.has_valid_value():
-			raise TypeError("Value must be of type int, float, bool, str, or bytes")
+			log.error("Value must be of type int, float, bool, str, or bytes")
 		log.info("setting '%s' = '%s' on network", str(node), node.value)
 		return await self.set_digest(node)
 
@@ -312,7 +312,7 @@ class Server:
 
 		Parameters
 		----------
-			fname: strtest_can_set_and_get
+			fname: str
 				File location where in which to write state
 		"""
 		fname = fname or self.statefile

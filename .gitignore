@@ -1,31 +1,18 @@
-# docs
-docs/_build
-apidoc
-
-# build
-kademlia.egg-info
-liaa.egg-info
-build
-dist
-*.pyc
-
-# general
 __pycache__
-
-# env
-.vscode/
-.envrc
-venv/
-virtualenv/
-test-virtualenv/
-
-# testing
-.coverage
-.pytest_cache/
-
-# misc
 _trial_temp
-
-# runtime cache
+.coverage
+.envrc
+.pytest_cache/
+.vscode/
 *.pickle
 *.pid
+*.pyc
+apidoc
+build
+dist
+kademlia.egg-info
+liaa.egg-info
+test-virtualenv/
+venv/
+virtualenv/
+TODO

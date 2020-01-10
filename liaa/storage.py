@@ -6,7 +6,6 @@ import operator
 import os
 import pickle
 import time
-from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Iterable
 from itertools import takewhile
@@ -39,45 +38,31 @@ def pre_prune():
 	return wrapper
 
 
-class IStorage(ABC):
+# pylint: disable=too-few-public-methods
+class IStorage:
 	"""
 	IStorage
 
-	Local storage for this node.
-	IStorage implementations of get must return the same type as put in by set
+	Parameters
+	----------
+		node: Node
+			The node representing this peer
+		ttl: int
+			Max age that items can live untouched before being pruned
+			(default=604800 seconds = 1 week)
 	"""
+	def __init__(self, node: "Node", ttl: int = 604800):
+		self.node = node
+		self.ttl = ttl
+		kstore_dir = os.path.join(os.path.expanduser("~"), ".liaa")
+		if not os.path.exists(kstore_dir):
+			log.debug("Liaa dir at %s not found, creating...", kstore_dir)
+			os.mkdir(kstore_dir)
 
-	@abstractmethod
-	def get(self, hexkey: str, default=None) -> Optional["Node"]:
-		pass
-
-	@abstractmethod
-	def set(self, node: "Node"):
-		pass
-
-	@abstractmethod
-	def remove(self, hexkey: str):
-		pass
-
-	@abstractmethod
-	def iter_older_than(self, seconds_old: int):
-		pass
-
-	@abstractmethod
-	def prune(self):
-		pass
-
-	@abstractmethod
-	def __iter__(self):
-		pass
-
-	@abstractmethod
-	def __contains__(self, hexkey: str):
-		pass
-
-	@abstractmethod
-	def __len__(self):
-		pass
+		self.dir = os.path.join(kstore_dir, str(self.node.long_id))
+		if not os.path.exists(self.dir):
+			log.debug("Node dir at %s not found, creating...", self.dir)
+			os.mkdir(self.dir)
 
 
 class EphemeralStorage(IStorage):
@@ -93,9 +78,8 @@ class EphemeralStorage(IStorage):
 				Max age that items can live untouched before being pruned
 				(default=604800 seconds = 1 week)
 		"""
-		self.node = node
+		super(EphemeralStorage, self).__init__(node, ttl)
 		self.data = OrderedDict()
-		self.ttl = ttl
 
 	@pre_prune()
 	def get(self, hexkey: str, default: Optional[Any] = None) -> Optional["Node"]:
@@ -229,19 +213,7 @@ class DiskStorage(IStorage):
 				Max age that items can live untouched before being pruned
 				(default=604800 seconds = 1 week)
 		"""
-		self.node = node
-		self.ttl = ttl
-
-		kstore_dir = os.path.join(os.path.expanduser("~"), ".liaa")
-		if not os.path.exists(kstore_dir):
-			log.debug("Liaa dir at %s not found, creating...", kstore_dir)
-			os.mkdir(kstore_dir)
-
-		self.dir = os.path.join(kstore_dir, str(self.node.long_id))
-		if not os.path.exists(self.dir):
-			log.debug("Node dir at %s not found, creating...", self.dir)
-			os.mkdir(self.dir)
-
+		super(DiskStorage, self).__init__(node, ttl)
 		self.content_dir = os.path.join(self.dir, "content")
 		if not os.path.exists(self.content_dir):
 			log.debug("Node content dir at %s not found, creating...", self.content_dir)
@@ -426,4 +398,4 @@ class DiskStorage(IStorage):
 		return len(self.contents())
 
 
-StorageIface = DiskStorage
+StorageIface = EphemeralStorage

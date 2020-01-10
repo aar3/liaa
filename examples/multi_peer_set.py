@@ -13,29 +13,37 @@
 # 		- python examples/simple_peer.py -p 8000
 #
 # 	In terminal tab #2
-# 		- python examples/multi_peer_set.py -p 8001 -a 127.0.0.1:8000
+# 		- python examples/multi_peer_set.py -p 8001 -n 127.0.0.1:8000
 #
 # 	In terminal tab #3
-# 		- python examples/multi_peer_set.py -p 8002 -a 127.0.0.1:8001
+# 		- python examples/multi_peer_set.py -p 8002 -n 127.0.0.1:8001
 
 import logging
 import asyncio
+import time
 import sys
 import getopt
 
 from liaa.network import Server
 from liaa.node import Node, NodeType
-from liaa.utils import rand_str, split_addr, ArgsParser, rand_digest_id
+from liaa.utils import rand_str, split_addr, ArgsParser, rand_digest_id, str_arg_to_bool
 
 
 def usage():
 	return """
-Usage: python network.py -p [port] -a [bootstrap address]
+Usage: python multi_peer_set.py -p [port] -n [bootstrap neighbors]
 -p --port
 	Port on which to listen (e.g., 8000)
--a --address
-	Address of node to use as bootstrap node (e.g., 127.0.0.1:8000)
+-n --neighbors
+	Neighbors with which to bootstrap (e.g., 177.91.19.1:8000,178.31.13.21:9876)
+		or 'False' if not passing an args
 	"""
+
+async def make_fake_data(server):
+	while True:
+		resource = Node(rand_digest_id(), type=NodeType.Resource, value=rand_str())
+		await server.set(resource)
+		await asyncio.sleep(5)
 
 
 def main():
@@ -48,15 +56,14 @@ def main():
 	log.setLevel(logging.DEBUG)
 
 	loop = asyncio.get_event_loop()
-	loop.set_debug(True)
 
 	server = Server()
 
 	parser = ArgsParser()
 
 	try:
-		args = "p:a:"
-		long_args = ["--port", "--addr="]
+		args = "p:n:"
+		long_args = ["--port", "--neighbors="]
 		opts, args = getopt.getopt(sys.argv[1:], args, long_args)
 		parser.add_many(opts)
 	except getopt.GetoptError as err:
@@ -70,22 +77,19 @@ def main():
 
 	loop.run_until_complete(server.listen(int(parser.get("-p", "--port"))))
 
-	host, port = split_addr(parser.get("-a", "--addr"))
-	loop.run_until_complete(server.bootstrap([(host, port)]))
-
-	while True:
-		resource = Node(rand_digest_id(), type=NodeType.Resource, value=rand_str())
-		loop.run_until_complete(server.set(resource))
-		loop.run_until_complete(asyncio.sleep(5))
+	bootstrap_peers = str_arg_to_bool(parser.get("-n", "--neighbors"))
+	if bootstrap_peers:
+		bootstrap_peers = bootstrap_peers.split(",")
+		loop.run_until_complete(server.bootstrap(list(map(split_addr, bootstrap_peers))))
 
 	try:
+		loop.create_task(make_fake_data(server))
 		loop.run_forever()
 	except KeyboardInterrupt:
-		print("\nAttempting to gracefully shut down...")
+		log.info("Attempting to gracefully shut down...")
 	finally:
 		server.stop()
-		loop.close()
-		print("Shutdown successul")
+		log.info("Shutdown successul")
 
 if __name__ == "__main__":
 

@@ -11,7 +11,7 @@ class TestEphemeralStorage:
 		assert isinstance(storage, EphemeralStorage)
 
 	def test_can_set_and_get(self, mknode, mkrsrc):
-		storage = EphemeralStorage(mknode, 10)
+		storage = EphemeralStorage(mknode(), 10)
 		resource = mkrsrc(key=b"one", value=b"two")
 		storage.set(resource)
 

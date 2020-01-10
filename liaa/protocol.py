@@ -107,7 +107,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
 		self._wait = wait
 		self._outstanding_msgs: Dict[int, Tuple[asyncio.Future, asyncio.Handle]] = {}
-		self._new_queue = {}
+		self._queue = {}
 		self.transport = None
 
 	def connection_made(self, transport: asyncio.Handle) -> None:
@@ -179,14 +179,14 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		log.debug("received %iB response for message id %s from %s", sys.getsizeof(data),
 					idf, join_addr(msgargs[1]))
 
-		if not idf in self._new_queue:
+		if not idf in self._queue:
 			log.warning("could not mark datagram %s as received", idf)
 			return
 
-		fut, timeout = self._new_queue[idf]
+		fut, timeout = self._queue[idf]
 		fut.set_result((True, data))
 		timeout.cancel()
-		del self._new_queue[idf]
+		del self._queue[idf]
 
 	async def _accept_request(self, buff: bytes, address: Tuple[str, int]) -> None:
 		"""
@@ -256,7 +256,8 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			msg_id = hashlib.sha1(os.urandom(32)).digest()
 			data = umsgpack.packb([name, args])
 			if len(data) > 8192:
-				raise MalformedMessage("Total length of function name and arguments cannot exceed 8K")
+				log.error("Total length of function name and arguments cannot exceed 8K")
+				return None
 			txdata = Header.Request + msg_id + data
 
 			# pylint: disable=bad-continuation
@@ -268,8 +269,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			loop = asyncio.get_event_loop()
 			future = loop.create_future()
 			timeout = loop.call_later(self._wait, self._timeout, msg_id)
-			# self._queue.enqueue_fut(msg_id, future, timeout)
-			self._new_queue[msg_id] = (future, timeout)
+			self._queue[msg_id] = (future, timeout)
 			self._outstanding_msgs[msg_id] = (future, timeout)
 			return future
 
