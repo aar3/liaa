@@ -24,9 +24,10 @@ from liaa.network import Server
 from liaa.utils import rand_str, rand_digest_id
 from liaa.node import Node, NodeType
 
+# pylint: disable=invalid-name
 
 host = "127.0.0.1"
-num_peers = 5
+num_peers = 20
 start_port = 8000
 
 
@@ -61,7 +62,14 @@ def run_server(loop, server, port, neighbor_ports):
 def main():
 
 	handles = []
-	servers = [Server() for _ in range(num_peers)]
+	servers = []
+
+	for _ in range(num_peers):
+		ksize = random.randint(14, 20)
+		alpha = random.randint(2, 6)
+		server = Server(ksize=ksize, alpha=alpha)
+		servers.append(server)
+
 	ports = range(start_port, (start_port + num_peers))
 
 	for server, port in zip(servers, ports):

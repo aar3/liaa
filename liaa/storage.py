@@ -75,7 +75,7 @@ class EphemeralStorage(IStorage):
 			node: Node
 				The node representing this peer
 			ttl: int
-				Max age that items can live untouched before being pruned
+			Max age that items can live untouched before being pruned
 				(default=604800 seconds = 1 week)
 		"""
 		super(EphemeralStorage, self).__init__(node, ttl)
@@ -398,4 +398,4 @@ class DiskStorage(IStorage):
 		return len(self.contents())
 
 
-StorageIface = EphemeralStorage
+StorageIface = DiskStorage

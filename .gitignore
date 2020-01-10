@@ -15,4 +15,5 @@ liaa.egg-info
 test-virtualenv/
 venv/
 virtualenv/
-TODO
+docs/TODO
+analysis/
