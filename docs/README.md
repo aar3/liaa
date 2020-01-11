@@ -1,6 +1,6 @@
 # Liaa 
 
-<img src="./logo.png" alt="drawing" width="200"/>
+<img src="./logo.png" alt="drawing" width="160"/>
 
 ## A Distributed Hash Table
 

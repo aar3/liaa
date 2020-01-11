@@ -22,6 +22,9 @@ class KBucket:
 	def get_nodes(self):
 		return list(self.nodes.values())
 
+	def get_replacement_nodes(self):
+		return list(self.replacement_nodes.values())
+
 	def split(self):
 		midpoint = (self.range[0] + self.range[1]) / 2
 		one = KBucket(self.range[0], midpoint, self.ksize)
@@ -34,11 +37,11 @@ class KBucket:
 		return (one, two)
 
 	def remove_node(self, node):
-		if node.digest_id in self.replacement_nodes:
-			del self.replacement_nodes[node.digest_id]
+		if node.key in self.replacement_nodes:
+			del self.replacement_nodes[node.key]
 
-		if node.digest_id in self.nodes:
-			del self.nodes[node.digest_id]
+		if node.key in self.nodes:
+			del self.nodes[node.key]
 
 			if self.replacement_nodes:
 				newnode_id, newnode = self.replacement_nodes.popitem()
@@ -48,7 +51,7 @@ class KBucket:
 		return self.range[0] <= node.long_id <= self.range[1]
 
 	def is_new_node(self, node):
-		return node.digest_id not in self.nodes
+		return node.key not in self.nodes
 
 	def add_node(self, node):
 		"""
@@ -58,21 +61,21 @@ class KBucket:
 		If the bucket is full, keep track of node in a replacement list,
 		per section 4.1 of the paper.
 		"""
-		if node.digest_id in self.nodes:
-			del self.nodes[node.digest_id]
-			self.nodes[node.digest_id] = node
+		if node.key in self.nodes:
+			del self.nodes[node.key]
+			self.nodes[node.key] = node
 		elif len(self) < self.ksize:
-			self.nodes[node.digest_id] = node
+			self.nodes[node.key] = node
 		else:
-			if node.digest_id in self.replacement_nodes:
-				del self.replacement_nodes[node.digest_id]
-			self.replacement_nodes[node.digest_id] = node
+			if node.key in self.replacement_nodes:
+				del self.replacement_nodes[node.key]
+			self.replacement_nodes[node.key] = node
 			return False
 		return True
 
 	def depth(self):
 		vals = self.nodes.values()
-		sprefix = shared_prefix([bytes_to_bit_string(n.digest_id) for n in vals])
+		sprefix = shared_prefix([bytes_to_bit_string(n.digest) for n in vals])
 		return len(sprefix)
 
 	def head(self):
@@ -192,7 +195,7 @@ class RoutingTable:
 		nodes = []
 		for neighbor in TableTraverser(self, node):
 			notexcluded = exclude is None or not neighbor.is_same_node(exclude)
-			if neighbor.digest_id != node.digest_id and notexcluded:
+			if neighbor.digest != node.digest and notexcluded:
 				heapq.heappush(nodes, (node.distance_to(neighbor), neighbor))
 			if len(nodes) == k:
 				break

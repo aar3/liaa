@@ -29,83 +29,101 @@ def bootstrap_node(event_loop):
 # pylint: disable=redefined-outer-name
 @pytest.fixture()
 def mknode():
-	# pylint: disable=invalid-name
-	def _mknode(digest_id=None, ip=None, port=None, intid=None):
+	def _mknode(key=None, node_type=None, value=None):
 		"""
 		Make a node.  Created a random id if not specified.
 		"""
-		if intid is not None:
-			digest_id = struct.pack('>l', intid)
-		if not digest_id:
-			randbits = str(random.getrandbits(255))
-			digest_id = hashlib.sha1(randbits.encode()).digest()
-		return Node(digest_id, ip, port)
+		key = key or rand_str()
+		node_type = node_type or NodeType.Peer
+		return Node(key, node_type, value)
 	return _mknode
+
+@pytest.fixture()
+def mkpeer():
+	def _mkpeer(key=None):
+		"""
+		Make a peer node.  Created a random id if not specified.
+		"""
+		key = key or f"127.0.0.1:{random.randint(1000, 9000)}"
+		return Node(key, NodeType.Peer)
+	return _mkpeer
 
 
 @pytest.fixture()
-def mkdgram():
-	def _mkdgram(header=Header.Request, msg_id=os.urandom(32), data=('funcname', 123)):
+def mkresource():
+	def _mkresource(key=None, value=None):
 		"""
-		Create a datagram
+		Make a resource node.  Created a random id if not specified.
 		"""
-		return header + hashlib.sha1(msg_id).digest() + umsgpack.packb(data)
-	return _mkdgram
+		key = key or rand_str()
+		value = value or rand_str().encode()
+		return Node(key, NodeType.Resource, value)
+	return _mkresource
 
 
 @pytest.fixture()
 def mkrsrc():
 	def _mkrsrc(key=None, value=None):
 		"""
-		Create a fake resource
+		Create a fake resource node
 		"""
-		key = key or rand_digest_id()
+		key = key or rand_str()
 		value = value or rand_str()
-		# pylint: disable=bad-continuation
-		return Node(digest_id=key,
-						type=NodeType.Resource,
-						value=value)
+		return Node(key=key, node_type=NodeType.Resource, value=value)
 	return _mkrsrc
 
 
-# pylint: disable=too-few-public-methods
 @pytest.fixture()
 def mkbucket():
 	def _mkbucket(ksize, low=0, high=2**160):
+		"""
+		Create a fake KBucket
+		"""
 		return KBucket(low, high, ksize)
 	return _mkbucket
 
 
 # pylint: disable=too-few-public-methods
 class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
-	def __init__(self, source_id, storage, ksize=20):
-		super(FakeProtocol, self).__init__(source_id, storage=storage, ksize=ksize)
-		self.router = RoutingTable(self, ksize, Node(source_id))
-		self.source_id = source_id
+	def __init__(self, source_node, storage, ksize=20):
+		super(FakeProtocol, self).__init__(source_node, storage, ksize)
+		self.router = RoutingTable(self, ksize, source_node)
 
 
 @pytest.fixture()
-def fake_proto(mknode):
+def fake_proto(mkpeer):
 	def _fake_proto(node=None):
-		node = node or mknode()
-		return FakeProtocol(node.digest_id, StorageIface(node), ksize=20)
+		"""
+		Create a fake protocol
+		"""
+		node = node or mkpeer()
+		return FakeProtocol(node, StorageIface(node), ksize=20)
 	return _fake_proto
 
 
 # pylint: disable=too-few-public-methods
 class FakeServer:
 	def __init__(self, node):
-		self.node_id = node.digest_id
+		self.node = node
 		self.storage = StorageIface(node)
 		self.ksize = 20
 		self.alpha = 3
-		self.protocol = FakeProtocol(self.node_id, self.storage, self.ksize)
+		self.protocol = FakeProtocol(self.node.key, self.storage, self.ksize)
 		self.router = self.protocol.router
 
 
 @pytest.fixture
-def fake_server(mknode):
-	return FakeServer(mknode())
+def fake_server(mkpeer):
+	return FakeServer(mkpeer())
+
+
+@pytest.fixture
+def mkserver():
+	def _mkserver(iface=None, port=None, ksize=None, alpha=None):
+		iface = iface or "0.0.0.0"
+		port = port or 8000
+		return Server(iface, port)
+	return _mkserver
 
 
 class Sandbox:

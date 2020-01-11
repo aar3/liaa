@@ -3,7 +3,7 @@ import heapq
 import logging
 from typing import Optional, List, Any
 
-from liaa.utils import hex_to_int, check_dht_value_type, digest_to_int
+from liaa.utils import hex_to_int, check_dht_value_type, digest_to_int, join_addr, split_addr, pack
 
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -18,13 +18,8 @@ class NodeType:
 # pylint: disable=too-many-instance-attributes
 class Node:
 	# pylint: disable=bad-continuation
-	def __init__(self,
-		digest_id: bytes,
-		ip: Optional[str] = None,
-		port: Optional[int] = None,
-		type: int = NodeType.Peer,  # pylint: disable=redefined-builtin
-		value: Optional[Any] = None
-	):
+	def __init__(self, key: Optional[str] = None, node_type: int = NodeType.Peer,
+		value: Optional[Any] = None):
 		"""
 		Node
 
@@ -39,34 +34,34 @@ class Node:
 		----------
 			digest_id: bytes
 				A value between 0 and 2^160 (as byte array)
-			ip: str
-				Optional IP address where this Node lives
-			port:
-				Optional port for this Node (set when IP is set)
-			type: int
+			key: str
+				String identifier or this node
+					is `IP:PORT` if node_type == NodeType.Peer
+			node_type: int
 				Indicator of whether the node represents a peer or a resource in
 				the network
 			value: Optional[Any]
-				Payload associated with node (if self.type == NodeType.Resource)
+				Payload associated with node (if self.node_type == NodeType.Resource)
 		"""
-
-		# byte array composed of int_to_digest(self.int_id)
-		self.digest_id = digest_id
-		self.int_id = digest_to_int(self.digest_id)
-		self.hex = self.digest_id.hex()
-		self.long_id = hex_to_int(self.digest_id.hex())
-
-		self.ip = ip  # pylint: disable=invalid-name
-		self.port = port
-
-		self.type = type
+		self.node_type = node_type
 		self.value = value
+		self.key = key
+		# pylint: disable=invalid-name
+		self.ip = None
+		self.port = None
+
+		if self.node_type == NodeType.Peer:
+			self.ip, self.port = split_addr(self.key)
+
+		self.digest = pack("I", self.key)
+		self.hex = self.digest.hex()
+		self.long_id = hex_to_int(self.digest.hex())
 
 	def has_valid_value(self) -> bool:
 		return check_dht_value_type(self.value)
 
-	def is_same_node(self, node: "Node") -> bool:
-		return self.ip == node.ip and self.port == node.port
+	def is_same_node(self, other: "Node") -> bool:
+		return self.key == other.key
 
 	def distance_to(self, node: "Node") -> int:
 		"""
@@ -80,17 +75,10 @@ class Node:
 		return self.long_id ^ node.long_id
 
 	def __eq__(self, other: "Node") -> bool:
-		# if we're dealing with a peer node then we determine sameness
-		# by the two nodes having the same server
-		if self.type == NodeType.Peer:
-			return self.ip == other.ip and self.port == other.port
-
-		# if we're dealing with a resource node, we say two nodes are the same
-		# if they have the same value
-		return self.value == other.value
+		return self.key == other.key
 
 	def __iter__(self):
-		return iter([self.digest_id, self.ip, self.port])
+		return iter([self.digest, self.ip, self.port])
 
 	def __hash__(self):
 		return self.long_id
@@ -99,10 +87,7 @@ class Node:
 		return repr([self.long_id, self.ip, self.port])
 
 	def __str__(self):
-		# return f"<{self.type}, {self.ip}, {self.port}, {self.long_id}>"
-		if self.type == NodeType.Peer:
-			return f"{self.type}@{self.ip}:{self.port}"
-		return f"{self.type}@{self.long_id}"
+		return self.node_type + "@" + self.key
 
 
 class NodeHeap:
@@ -144,15 +129,15 @@ class NodeHeap:
 			return
 		nheap = []
 		for distance, node in self.heap:
-			if node.digest_id not in peers:
+			if node not in peers:
 				heapq.heappush(nheap, (distance, node))
 				continue
 			log.debug("removing peer %s from node %s", str(node), str(node))
 		self.heap = nheap
 
-	def get_node(self, node_id):
+	def get_node(self, digest):
 		for _, node in self.heap:
-			if node.digest_id == node_id:
+			if node.digest == digest:
 				return node
 		return None
 
@@ -160,10 +145,10 @@ class NodeHeap:
 		return len(self.get_uncontacted()) == 0
 
 	def get_ids(self):
-		return [n.digest_id for n in self]
+		return [n.digest for n in self]
 
 	def mark_contacted(self, node):
-		self.contacted.add(node.digest_id)
+		self.contacted.add(node.digest)
 
 	def popleft(self):
 		return heapq.heappop(self.heap)[1] if self else None
@@ -191,9 +176,9 @@ class NodeHeap:
 
 	def __contains__(self, node):
 		for _, other in self.heap:
-			if node.digest_id == other.digest_id:
+			if node.digest == other.digest:
 				return True
 		return False
 
 	def get_uncontacted(self):
-		return [n for n in self if n.digest_id not in self.contacted]
+		return [n for n in self if n.digest not in self.contacted]

@@ -2,6 +2,7 @@ import sys
 import operator
 import random
 import string
+import struct
 import asyncio
 from typing import Dict, Any, List, Union, Tuple, Optional
 
@@ -46,7 +47,7 @@ def rand_str(num=20) -> str:
 	Create a random string array
 	"""
 	chars = string.ascii_letters + string.digits
-	return "".join(random.sample(chars, num))
+	return "".join([random.choice(chars) for _ in range(num)])
 
 
 def rand_int_id() -> str:
@@ -262,3 +263,14 @@ def str_arg_to_bool(arg: str) -> Union[bool, str]:
 			bool if arg is false else original arg
 	"""
 	return False if arg.lower() == 'false' else arg
+
+
+def pack(fmt: str, arr: str) -> bytes:
+	arr = arr.encode()
+	return struct.pack(fmt, len(arr)) + arr
+
+
+def unpack(fmt: str, arr: bytes) -> Tuple[int, bytes]:
+	size = struct.calcsize(fmt)
+	return struct.unpack(fmt, arr[:size]), arr[size:]
+
