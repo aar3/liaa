@@ -360,7 +360,7 @@ class HttpInterface(asyncio.Protocol):
 			str:
 				Response to write to client
 		"""
-		node = Node(rand_digest_id(), type=NodeType.Resource, value=payload)
+		node = Node(rand_digest_id(), node_type=NodeType.Resource, value=payload)
 		self.storage.set(node)
 		return self.pack_response(200, "OK", json.dumps({"details": "ok"}))
 
@@ -496,7 +496,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		source = Node(node_id, sender[0], sender[1])
 		log.debug("%s got ping request from %s", self.source_node, join_addr(sender))
 		self.welcome_if_new(source)
-		return self.source_node.digest_id
+		return self.source_node.digest
 
 	def rpc_store(self, sender: "Node", node_id: bytes, key: bytes, value: Any) -> bool:
 		"""
@@ -523,7 +523,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		# pylint: disable=bad-continuation
 		log.debug("%s got store request from %s, storing %iB at %s",
 					self.source_node, join_addr(sender), len(value), key.hex())
-		resource = Node(key, type=NodeType.Resource, value=value)
+		resource = Node(key, node_type=NodeType.Resource, value=value)
 		self.storage.set(resource)
 		return True
 
@@ -609,7 +609,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 				Nodes closes to node_to_find which to continue search
 		"""
 		address = (node_to_ask.ip, node_to_ask.port)
-		result = await self.find_node(address, self.source_node.digest_id, node_to_find.digest_id)
+		result = await self.find_node(address, self.source_node.digest, node_to_find.digest)
 		return self.handle_call_response(result, node_to_ask)
 
 	async def call_find_value(self,
@@ -633,7 +633,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 				value, or the actual value
 		"""
 		address = (node_to_ask.ip, node_to_ask.port)
-		result = await self.find_value(address, self.source_node.digest_id, node_to_find.id)
+		result = await self.find_value(address, self.source_node.digest, node_to_find.id)
 		return self.handle_call_response(result, node_to_ask)
 
 	async def call_ping(self, node_to_ask: "Node") -> int:
@@ -651,7 +651,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 				ID of peer responding to ping
 		"""
 		address = (node_to_ask.ip, node_to_ask.port)
-		result = await self.ping(address, self.source_node.digest_id)
+		result = await self.ping(address, self.source_node.digest)
 		return self.handle_call_response(result, node_to_ask)
 
 	async def call_store(self, node_to_ask: "Node", key: int, value: Any) -> bool:
@@ -673,7 +673,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 				Indication that store operation was succesful
 		"""
 		address = (node_to_ask.ip, node_to_ask.port)
-		result = await self.store(address, self.source_node.digest_id, key, value)
+		result = await self.store(address, self.source_node.digest, key, value)
 		return self.handle_call_response(result, node_to_ask)
 
 	def welcome_if_new(self, node: "Node"):
@@ -692,7 +692,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 			node: Node
 				Node to add to routing table
 		"""
-		if not self.router.is_new_node(node) or node.type == NodeType.Resource:
+		if not self.router.is_new_node(node) or node.node_type == NodeType.Resource:
 			return
 
 		log.info("%s welcoming new node %s", self.source_node, node)
@@ -707,7 +707,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 				curr_distance_to_new = self.source_node.distance_to(inode) < closest_distance_to_new
 
 			if not neighbors or (is_closer_than_furthest and curr_distance_to_new):
-				asyncio.ensure_future(self.call_store(node, inode.digest_id, inode.value))
+				asyncio.ensure_future(self.call_store(node, inode.digest, inode.value))
 
 		self.router.add_contact(node)
 

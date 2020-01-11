@@ -41,7 +41,7 @@ class TestKademliaProtocol:
 
 		# pylint: disable=unused-argument
 		def ping_stub(sender, node_id):
-			return sender.digest_id
+			return sender.digest
 
 		# pylint: disable=unused-argument
 		def call_store_stub(node_to_ask, key, value):
@@ -51,7 +51,7 @@ class TestKademliaProtocol:
 		box.stub("call_store", call_store_stub)
 		box.stub("rpc_ping", ping_stub)
 
-		source_id = proto.rpc_ping(sender, sender.digest_id)
-		assert source_id == sender.digest_id
+		source_id = proto.rpc_ping(sender, sender.digest)
+		assert source_id == sender.digest
 
 		box.restore()

@@ -59,7 +59,7 @@ class TestServer:
 
 	def test_set_digest_returns_void_when_node_has_no_neighbors(self):
 		server = Server()
-		resource = Node(rand_digest_id(), type=NodeType.Resource, value=rand_str())
+		resource = Node(rand_digest_id(), node_type=NodeType.Resource, value=rand_str())
 		# pylint: disable=protected-access
 		server.protocol = server._create_protocol()
 		result = asyncio.run(server.set_digest(resource))

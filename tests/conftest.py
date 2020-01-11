@@ -29,49 +29,34 @@ def bootstrap_node(event_loop):
 # pylint: disable=redefined-outer-name
 @pytest.fixture()
 def mknode():
-	# pylint: disable=invalid-name
-	def _mknode(digest_id=None, ip=None, port=None, intid=None):
+	def _mknode(key=None, node_type=None, value=None):
 		"""
 		Make a node.  Created a random id if not specified.
 		"""
-		if intid is not None:
-			digest_id = struct.pack('>l', intid)
-		if not digest_id:
-			randbits = str(random.getrandbits(255))
-			digest_id = hashlib.sha1(randbits.encode()).digest()
-		return Node(digest_id, ip, port)
+		key = key or rand_str()
+		node_type = node_type or NodeType.Peer
+		return Node(key, node_type, value)
 	return _mknode
-
-
-@pytest.fixture()
-def mkdgram():
-	def _mkdgram(header=Header.Request, msg_id=os.urandom(32), data=('funcname', 123)):
-		"""
-		Create a datagram
-		"""
-		return header + hashlib.sha1(msg_id).digest() + umsgpack.packb(data)
-	return _mkdgram
 
 
 @pytest.fixture()
 def mkrsrc():
 	def _mkrsrc(key=None, value=None):
 		"""
-		Create a fake resource
+		Create a fake resource node
 		"""
-		key = key or rand_digest_id()
+		key = key or rand_str()
 		value = value or rand_str()
-		# pylint: disable=bad-continuation
-		return Node(digest_id=key,
-						type=NodeType.Resource,
-						value=value)
+		return Node(key=key, node_type=NodeType.Resource, value=value)
 	return _mkrsrc
 
 
-# pylint: disable=too-few-public-methods
 @pytest.fixture()
 def mkbucket():
 	def _mkbucket(ksize, low=0, high=2**160):
+		"""
+		Create a fake KBucket
+		"""
 		return KBucket(low, high, ksize)
 	return _mkbucket
 
@@ -87,15 +72,18 @@ class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
 @pytest.fixture()
 def fake_proto(mknode):
 	def _fake_proto(node=None):
+		"""
+		Create a fake protocol
+		"""
 		node = node or mknode()
-		return FakeProtocol(node.digest_id, StorageIface(node), ksize=20)
+		return FakeProtocol(node.digest, StorageIface(node), ksize=20)
 	return _fake_proto
 
 
 # pylint: disable=too-few-public-methods
 class FakeServer:
 	def __init__(self, node):
-		self.node_id = node.digest_id
+		self.node_id = node.digest
 		self.storage = StorageIface(node)
 		self.ksize = 20
 		self.alpha = 3

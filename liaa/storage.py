@@ -101,7 +101,7 @@ class EphemeralStorage(IStorage):
 		log.debug("%s fetching resource %s", self.node, hexkey)
 		if hexkey in self:
 			_, value = self.data[hexkey]
-			return Node(hex_to_int_digest(hexkey), type=NodeType.Resource, value=value)
+			return Node(hex_to_int_digest(hexkey), node_type=NodeType.Resource, value=value)
 		log.debug("Resource %s not found on node %s", hexkey, self.node)
 		return default
 
@@ -185,7 +185,7 @@ class EphemeralStorage(IStorage):
 		ivalues = map(operator.itemgetter(1), self.data.values())
 		# pylint: disable=bad-continuation
 		nodes = [Node(hex_to_int_digest(p[0]),
-					type=NodeType.Resource,
+					node_type=NodeType.Resource,
 					value=p[1])
 			for p in zip(ikeys, ivalues)]
 		for node in nodes:
@@ -240,7 +240,7 @@ class DiskStorage(IStorage):
 		if hexkey in self:
 			# pylint: disable=bad-continuation
 			return Node(hex_to_int_digest(hexkey),
-						type=NodeType.Resource,
+						node_type=NodeType.Resource,
 						value=self._load_data(hexkey))
 		log.debug("Resource %s not found on node %s", hexkey, self.node)
 		return default
@@ -380,7 +380,7 @@ class DiskStorage(IStorage):
 		ivalues = [self._load_data(k) for k in ikeys]
 		# pylint: disable=bad-continuation
 		nodes = [Node(hex_to_int_digest(p[0]),
-					type=NodeType.Resource,
+					node_type=NodeType.Resource,
 					value=p[1])
 					for p in zip(ikeys, ivalues)]
 		for node in nodes:

@@ -153,7 +153,7 @@ class Server:
 
 		# now republish keys older than one hour
 		for node in self.storage.iter_older_than(3600):
-			# node = Node(hex_to_int_digest(hexkey), type=NodeType.Resource, value=value)
+			# node = Node(hex_to_int_digest(hexkey), node_type=NodeType.Resource, value=value)
 			log.debug("%s republishing node %s from store", self.node, node)
 			await self.set_digest(node)
 
@@ -214,7 +214,7 @@ class Server:
 				None if ping was unsuccessful, or peer as Node if ping
 				was successful
 		"""
-		result = await self.protocol.ping(addr, self.node.digest_id)
+		result = await self.protocol.ping(addr, self.node.digest)
 		return Node(result[1], addr[0], addr[1]) if result[0] else None
 
 	async def get(self, key: int) -> asyncio.Future:
@@ -241,7 +241,7 @@ class Server:
 		if result is not None:
 			return result
 
-		node = Node(dkey, type=NodeType.Resource)
+		node = Node(dkey, node_type=NodeType.Resource)
 		nearest = self.protocol.router.find_neighbors(node)
 
 		if not nearest:
@@ -279,7 +279,7 @@ class Server:
 		Parameters
 		----------
 			node: Node
-				Node to be set (where node.type == NodeType.Resource)
+				Node to be set (where node.node_type == NodeType.Resource)
 
 		Returns
 		-------
@@ -300,7 +300,7 @@ class Server:
 		biggest = max([n.distance_to(node) for n in nodes])
 		if self.node.distance_to(node) < biggest:
 			self.storage.set(node)
-		results = [self.protocol.call_store(n, node.digest_id, node.value) for n in nodes]
+		results = [self.protocol.call_store(n, node.digest, node.value) for n in nodes]
 
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
@@ -322,7 +322,7 @@ class Server:
 		data = {
 			'ksize': self.ksize,
 			'alpha': self.alpha,
-			'id': self.node.digest_id,
+			'id': self.node.digest,
 			'neighbors': self.bootstrappable_neighbors()
 		}
 

@@ -41,7 +41,7 @@ Usage: python multi_peer_set.py -p [port] -n [bootstrap neighbors]
 
 async def make_fake_data(server):
 	while True:
-		resource = Node(rand_digest_id(), type=NodeType.Resource, value=rand_str())
+		resource = Node(rand_digest_id(), node_type=NodeType.Resource, value=rand_str())
 		await server.set(resource)
 		await asyncio.sleep(5)
 
