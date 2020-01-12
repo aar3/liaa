@@ -6,14 +6,12 @@ import operator
 import os
 import pickle
 import time
-from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Iterable
 from itertools import takewhile
 from typing import Any, List, Optional, Tuple
 
 from liaa.node import Node, NodeType
-from liaa.utils import hex_to_int_digest
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -39,45 +37,31 @@ def pre_prune():
 	return wrapper
 
 
-class IStorage(ABC):
+# pylint: disable=too-few-public-methods
+class IStorage:
 	"""
 	IStorage
 
-	Local storage for this node.
-	IStorage implementations of get must return the same type as put in by set
+	Parameters
+	----------
+		node: Node
+			The node representing this peer
+		ttl: int
+			Max age that items can live untouched before being pruned
+			(default=604800 seconds = 1 week)
 	"""
+	def __init__(self, node: "Node", ttl: int = 604800):
+		self.node = node
+		self.ttl = ttl
+		kstore_dir = os.path.join(os.path.expanduser("~"), ".liaa")
+		if not os.path.exists(kstore_dir):
+			log.debug("Liaa dir at %s not found, creating...", kstore_dir)
+			os.mkdir(kstore_dir)
 
-	@abstractmethod
-	def get(self, hexkey: str, default=None) -> Optional["Node"]:
-		pass
-
-	@abstractmethod
-	def set(self, node: "Node"):
-		pass
-
-	@abstractmethod
-	def remove(self, hexkey: str):
-		pass
-
-	@abstractmethod
-	def iter_older_than(self, seconds_old: int):
-		pass
-
-	@abstractmethod
-	def prune(self):
-		pass
-
-	@abstractmethod
-	def __iter__(self):
-		pass
-
-	@abstractmethod
-	def __contains__(self, hexkey: str):
-		pass
-
-	@abstractmethod
-	def __len__(self):
-		pass
+		self.dir = os.path.join(kstore_dir, str(self.node.long_id))
+		if not os.path.exists(self.dir):
+			log.debug("Node dir at %s not found, creating...", self.dir)
+			os.mkdir(self.dir)
 
 
 class EphemeralStorage(IStorage):
@@ -90,23 +74,22 @@ class EphemeralStorage(IStorage):
 			node: Node
 				The node representing this peer
 			ttl: int
-				Max age that items can live untouched before being pruned
+			Max age that items can live untouched before being pruned
 				(default=604800 seconds = 1 week)
 		"""
-		self.node = node
+		super(EphemeralStorage, self).__init__(node, ttl)
 		self.data = OrderedDict()
-		self.ttl = ttl
 
 	@pre_prune()
-	def get(self, hexkey: str, default: Optional[Any] = None) -> Optional["Node"]:
+	def get(self, key: str, default: Optional[bytes] = None) -> Optional["Node"]:
 		"""
 		Retrieve a node from storage
 
 		Parameters
 		----------
-			hexkey: str
-				Hex value of node's long_id
-			default: Optional[Any]
+			key: str
+				Key of node to be fetched
+			default: Optional[bytes]
 				Default value to return if node not in storage
 
 		Returns
@@ -114,11 +97,11 @@ class EphemeralStorage(IStorage):
 			Optional[Node]:
 				Node if node is in storage, else `default`
 		"""
-		log.debug("%s fetching resource %s", self.node, hexkey)
-		if hexkey in self:
-			_, value = self.data[hexkey]
-			return Node(hex_to_int_digest(hexkey), type=NodeType.Resource, value=value)
-		log.debug("Resource %s not found on node %s", hexkey, self.node)
+		log.debug("%s fetching Node %s", self.node, key)
+		if key in self:
+			_, value = self.data[key]
+			return Node(key=key, node_type=NodeType.Resource, value=value)
+		log.debug("Node %s not found on node %s", key, self.node)
 		return default
 
 	def set(self, node: "Node"):
@@ -130,24 +113,25 @@ class EphemeralStorage(IStorage):
 			node: Node
 				Node to be saved
 		"""
-		log.debug("%s setting resource %s", self.node, node.hex)
-		self.data[node.hex] = (time.monotonic(), node.value)
+		log.debug("%s setting node %s", self.node, node.key)
+		if node in self:
+			self.remove(node.key)
+		self.data[node.key] = (time.monotonic(), node.value)
 		log.debug("%s storage has %i items", self.node, len(self))
 
-	def remove(self, hexkey: str) -> None:
+	def remove(self, key: str) -> None:
 		"""
 		Remove a node from storage
 
 		Parameters
 		----------
-			hexkey: str
-				Hex value of node's long_id
+			key: str
+				Key of node to be removed
 		"""
-		if hexkey in self:
-			log.debug("%s removing resource %s", self.node, hexkey)
-			del self.data[hexkey]
-			return
-		log.debug("Resource %s not found on node %s", hexkey, self.node)
+		assert key in self
+		log.debug("%s removing resource %s", self.node, key)
+		del self.data[key]
+		log.debug("Resource %s not found on node %s", key, self.node)
 
 	def prune(self) -> None:
 		"""
@@ -156,7 +140,7 @@ class EphemeralStorage(IStorage):
 		for _, _ in self.iter_older_than(self.ttl):
 			self.data.popitem(last=False)
 
-	def iter_older_than(self, seconds_old: int) -> List[Tuple[int, Any]]:
+	def iter_older_than(self, seconds_old: int) -> List[Tuple[int, bytes]]:
 		"""
 		Return nodes that are older than `seconds_old`
 
@@ -170,7 +154,7 @@ class EphemeralStorage(IStorage):
 
 		Returns
 		-------
-			Iterable:
+			List[Tuple[int, bytes]]:
 				Zipped keys, and values of nodes that are older that `seconds_old`
 		"""
 		min_birthday = time.monotonic() - seconds_old
@@ -199,16 +183,13 @@ class EphemeralStorage(IStorage):
 		log.debug("%s iterating over %i items in storage", self.node, len(self.data))
 		ikeys = self.data.keys()
 		ivalues = map(operator.itemgetter(1), self.data.values())
-		# pylint: disable=bad-continuation
-		nodes = [Node(hex_to_int_digest(p[0]),
-					type=NodeType.Resource,
-					value=p[1])
-			for p in zip(ikeys, ivalues)]
+		nodes = [Node(key=p[0], node_type=NodeType.Resource, value=p[1]) for p in zip(ikeys, ivalues)]
+
 		for node in nodes:
 			yield node
 
-	def __contains__(self, hexkey: str) -> bool:
-		return hexkey in self.data
+	def __contains__(self, key: str) -> bool:
+		return key in self.data
 
 	@pre_prune()
 	def __len__(self) -> int:
@@ -229,34 +210,22 @@ class DiskStorage(IStorage):
 				Max age that items can live untouched before being pruned
 				(default=604800 seconds = 1 week)
 		"""
-		self.node = node
-		self.ttl = ttl
-
-		kstore_dir = os.path.join(os.path.expanduser("~"), ".liaa")
-		if not os.path.exists(kstore_dir):
-			log.debug("Liaa dir at %s not found, creating...", kstore_dir)
-			os.mkdir(kstore_dir)
-
-		self.dir = os.path.join(kstore_dir, str(self.node.long_id))
-		if not os.path.exists(self.dir):
-			log.debug("Node dir at %s not found, creating...", self.dir)
-			os.mkdir(self.dir)
-
+		super(DiskStorage, self).__init__(node, ttl)
 		self.content_dir = os.path.join(self.dir, "content")
 		if not os.path.exists(self.content_dir):
 			log.debug("Node content dir at %s not found, creating...", self.content_dir)
 			os.mkdir(self.content_dir)
 
 	@pre_prune()
-	def get(self, hexkey: str, default: Optional[Any] = None) -> Optional["Node"]:
+	def get(self, key: str, default: Optional[bytes] = None) -> Optional["Node"]:
 		"""
 		Retrieve a node from storage
 
 		Parameters
 		----------
-			hexkey: str
-				Hex value of node's long_id
-			default: Optional[Any]
+			key: str
+				Key of node to be fetched
+			default: Optional[bytes]
 				Default value to return if node not in storage
 
 		Returns
@@ -264,13 +233,10 @@ class DiskStorage(IStorage):
 			Optional[Node]:
 				Node if node is in storage, else `default`
 		"""
-		log.debug("%s fetching resource %s", self.node, hexkey)
-		if hexkey in self:
-			# pylint: disable=bad-continuation
-			return Node(hex_to_int_digest(hexkey),
-						type=NodeType.Resource,
-						value=self._load_data(hexkey))
-		log.debug("Resource %s not found on node %s", hexkey, self.node)
+		log.debug("%s fetching node %s", self.node, key)
+		if key in self:
+			return Node(key=key, node_type=NodeType.Resource, value=self._load_data(key))
+		log.debug("Node %s not found on node %s", key, self.node)
 		return default
 
 	def set(self, node: "Node") -> None:
@@ -282,27 +248,25 @@ class DiskStorage(IStorage):
 			node: Node
 				Node to be saved
 		"""
-		if node.hex in self:
-			self.remove(node)
-		log.debug("%s setting resource %s", self.node, node.hex)
+		if node.key in self:
+			self.remove(node.key)
+		log.debug("%s setting node %s", self.node, node.key)
 		self._persist_data(node)
 		log.debug("%s storage has %i items", self.node, len(self))
 
-	def remove(self, hexkey: str) -> None:
+	def remove(self, key: str) -> None:
 		"""
 		Remove a node from storage
 
 		Parameters
 		----------
-			hexkey: str
-				Hex value of node's long_id
+			key: str
+				Key of node to be removed
 		"""
-		try:
-			fname = os.path.join(self.content_dir, hexkey)
-			log.debug("%s removing resource %s", self.node, hexkey)
-			os.remove(fname)
-		except FileNotFoundError as err:
-			log.debug("Resource %s not found on node %s: %s", hexkey, self.node, str(err))
+		assert key in self
+		fname = os.path.join(self.content_dir, key)
+		log.debug("%s removing node %s", self.node, key)
+		os.remove(fname)
 
 	def iter_older_than(self, seconds_old: int) -> Iterable:
 		"""
@@ -344,7 +308,6 @@ class DiskStorage(IStorage):
 			List[str]:
 				Contents of storage directory
 		"""
-		# up until -1 will prevent node.state from being loaded
 		return os.listdir(self.content_dir)
 
 	def _persist_data(self, node: "Node") -> None:
@@ -356,34 +319,34 @@ class DiskStorage(IStorage):
 			node: Node
 				The node to save
 		"""
-		fname = os.path.join(self.content_dir, node.hex)
-		log.debug("%s attempting to persist %s", self.node, node.hex)
+		fname = os.path.join(self.content_dir, node.key)
+		log.debug("%s attempting to persist %s", self.node, node.key)
 		data = {"value": node.value, "time": time.monotonic()}
 		with open(fname, "wb") as ctx:
 			pickle.dump(data, ctx)
 
-	def _load_data(self, hexkey: str) -> Optional[Any]:
+	def _load_data(self, key: str) -> Optional[bytes]:
 		"""
-		Load a data at a given hexkey
+		Load a data at a given key
 
 		Parameters
 		----------
-			hexkey: str
-				Hexkey to load
+			key: str
+				Key of data to load
 
 		Returns
 		-------
-			Optional[Any]:
-				Data if hexkey is found, else None
+			Optional[bytes]:
+				Data if key is found, else None
 		"""
-		fname = os.path.join(self.content_dir, hexkey)
-		log.debug("%s attempting to read resource node at %s", self.node, hexkey)
+		fname = os.path.join(self.content_dir, key)
+		log.debug("%s attempting to read node at %s", self.node, key)
 		try:
 			with open(fname, "rb") as ctx:
 				data = pickle.load(ctx)
 				return data["value"]
 		except FileNotFoundError as err:
-			log.error("%s could not load key at %s: %s", self.node, hexkey, str(err))
+			log.error("%s could not load key at %s: %s", self.node, key, str(err))
 
 	def _content_stats(self) -> List[Tuple[str, float]]:
 		"""
@@ -394,11 +357,11 @@ class DiskStorage(IStorage):
 			List[Tuple[str, float]]
 				List of (filename, last_modified_time) pairs
 		"""
-		def time_delta(hexkey: str) -> Tuple[str, float]:
-			path = os.path.join(self.content_dir, hexkey)
+		def time_delta(key: str) -> Tuple[str, float]:
+			path = os.path.join(self.content_dir, key)
 			statbuff = os.stat(path)
 			diff = dt.datetime.fromtimestamp(time.time()) - dt.datetime.fromtimestamp(statbuff.st_mtime)
-			return hexkey, diff.seconds
+			return key, diff.seconds
 		return list(map(time_delta, self.contents()))
 
 	@pre_prune()
@@ -406,16 +369,12 @@ class DiskStorage(IStorage):
 		log.debug("%s iterating over %i items in storage", self.node, len(self.contents()))
 		ikeys = self.contents()
 		ivalues = [self._load_data(k) for k in ikeys]
-		# pylint: disable=bad-continuation
-		nodes = [Node(hex_to_int_digest(p[0]),
-					type=NodeType.Resource,
-					value=p[1])
-					for p in zip(ikeys, ivalues)]
+		nodes = [Node(key=p[0], node_type=NodeType.Resource, value=p[1]) for p in zip(ikeys, ivalues)]
 		for node in nodes:
 			yield node
 
-	def __contains__(self, hexkey: str) -> bool:
-		return hexkey in self.contents()
+	def __contains__(self, key: str) -> bool:
+		return key in self.contents()
 
 	@pre_prune()
 	def __repr__(self) -> str:

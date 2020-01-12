@@ -58,11 +58,10 @@ def main():
 	try:
 		loop.run_forever()
 	except KeyboardInterrupt:
-		print("\nAttempting to gracefully shut down...")
+		log.info("Attempting to gracefully shut down...")
 	finally:
 		server.stop()
-		loop.close()
-		print("Shutdown successul")
+		log.info("Shutdown successul")
 
 
 if __name__ == "__main__":

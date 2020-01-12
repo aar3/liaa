@@ -14,12 +14,14 @@ PORT = 8765
 class TestServer:
 	# pylint: disable=no-self-use
 	def test_server_instance_is_ok(self):
-		server = Server()
+		server = Server("0.0.0.0", 8000)
 		assert isinstance(server, Server)
+		assert server.node.ip == "0.0.0.0"
+		assert server.node.port == 8000
 
-	def test_server_can_start_and_stop(self):
+	def test_server_can_start_and_stop(self, mkserver):
 		loop = asyncio.get_event_loop()
-		server = Server()
+		server = mkserver()
 
 		assert not server.udp_transport
 		assert not server.protocol
@@ -27,7 +29,7 @@ class TestServer:
 		assert not server.save_state_loop
 		assert not server.listener
 
-		loop.run_until_complete(server.listen(PORT))
+		loop.run_until_complete(server.listen())
 
 		assert server.udp_transport
 		assert server.protocol
@@ -42,8 +44,8 @@ class TestServer:
 		assert server.save_state_loop.cancelled()
 		# assert not server.listener.is_serving()
 
-	def test_create_protocol_is_interchangeable(self):
-		server = Server()
+	def test_create_protocol_is_interchangeable(self, mkserver):
+		server = mkserver()
 		# pylint: disable=protected-access
 		proto = server._create_protocol()
 		assert isinstance(proto, KademliaProtocol)
@@ -53,27 +55,24 @@ class TestServer:
 
 		class HuskServer(Server):
 			protocol_class = CoconutProtocol
-		husk_server = HuskServer()
+		husk_server = HuskServer("0.0.0.0", 9000)
 		assert isinstance(husk_server._create_protocol(), CoconutProtocol)
 
 
-	def test_set_digest_returns_void_when_node_has_no_neighbors(self):
-		server = Server()
-		resource = Node(rand_digest_id(), type=NodeType.Resource, value=rand_str())
+	def test_set_digest_returns_void_when_node_has_no_neighbors(self, mkserver, mkresource):
+		server = mkserver()
+		node = mkresource()
 		# pylint: disable=protected-access
 		server.protocol = server._create_protocol()
-		result = asyncio.run(server.set_digest(resource))
+		result = asyncio.run(server.set_digest(node))
 		assert not result
 
-	def test_save_state_saves(self, sandbox, mknode):
-		server = Server()
+	def test_save_state_saves(self, sandbox, mkserver, mkpeer):
+		server = mkserver()
 
 		# pylint: disable=unused-argument,bad-continuation
 		def bootstrappable_neighbors_stub():
-			return [
-				mknode(digest_id=rand_digest_id(), ip="0.0.0.0", port=1234),
-				mknode(digest_id=rand_digest_id(), ip="0.0.0.0", port=4321)
-			]
+			return [mkpeer(), mkpeer()]
 
 		box = sandbox(server)
 		box.stub("bootstrappable_neighbors", bootstrappable_neighbors_stub)
@@ -86,16 +85,12 @@ class TestServer:
 
 		box.restore()
 
-	def test_can_load_state(self, sandbox, mknode):
-		server = Server()
+	def test_can_load_state(self, mkserver, sandbox, mkpeer):
+		server = mkserver()
 		asyncio.set_event_loop(asyncio.new_event_loop())
-		# pylint: disable=unused-argument,bad-continuation
+		
 		def bootstrappable_neighbors_stub():
-			return [
-				# make some fake peers
-				mknode(digest_id=rand_digest_id(), ip="0.0.0.0", port=1234),
-				mknode(digest_id=rand_digest_id(), ip="0.0.0.0", port=4321)
-			]
+			return [mkpeer(), mkpeer()]
 
 		def bootstrap_stub(addrs):
 			return addrs

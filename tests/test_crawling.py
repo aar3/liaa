@@ -19,8 +19,8 @@ def fake_spider_crawler(node):
 
 class TestSpiderCrawl:
 	# pylint: disable=no-self-use
-	def test_can_init_crawler(self, mknode):
-		crawler = fake_spider_crawler(node=mknode())
+	def test_can_init_crawler(self, mkpeer):
+		crawler = fake_spider_crawler(node=mkpeer())
 		assert isinstance(crawler, SpiderCrawl)
 		assert isinstance(crawler.nearest, NodeHeap)
 		assert len(crawler.nearest) == 0

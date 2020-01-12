@@ -49,7 +49,7 @@ def main():
 	bootstrap_peers = str_arg_to_bool(parser.get("-n", "--neighbors"))
 	if bootstrap_peers:
 		bootstrap_peers = bootstrap_peers.split(",")
-		loop.run_until_complete(server.bootstrap(list(map(split_addr, bootstrap_peers))))
+		loop.create_task(server.bootstrap(list(map(split_addr, bootstrap_peers))))
 
 	try:
 		loop.run_forever()

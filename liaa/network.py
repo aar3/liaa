@@ -8,7 +8,7 @@ from liaa.crawling import NodeSpiderCrawl, ValueSpiderCrawl
 from liaa.node import Node, NodeType
 from liaa.protocol import KademliaProtocol, HttpInterface
 from liaa.storage import StorageIface
-from liaa.utils import int_to_digest, rand_digest_id
+from liaa.utils import int_to_digest, rand_digest_id, join_addr
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -19,8 +19,7 @@ class Server:
 	protocol_class = KademliaProtocol
 
 	# pylint: disable=bad-continuation
-	def __init__(self,
-		node_id: Optional[bytes] = None, ksize: int = 20, alpha: int = 3, **kwargs):
+	def __init__(self, interface: str, port: int, ksize: int = 20, alpha: int = 3, **kwargs):
 		"""
 		High level view of a node instance.  This is the object that should be
 		created to start listening as an active node on the network.
@@ -28,14 +27,16 @@ class Server:
 
 		Parameters
 		----------
-			node_id: Optional[bytes]
-				The id for this node on the network.
+			interface: str
+				Interface on which to listen (default = 0.0.0.0)
+			port: int
+				Port on which to bind inteface
 			ksize: int
 				The k parameter from the paper (default = 20)
 			alpha: int
 				The alpha parameter from the paper (default = 3)
 		"""
-		self.node = Node(node_id if node_id else rand_digest_id())
+		self.node = Node(key=join_addr((interface, port)), node_type=NodeType.Peer)
 		log.info("Using storage interface: %s", StorageIface.__name__)
 		self.storage = StorageIface(self.node)
 		self.ksize = ksize
@@ -92,25 +93,15 @@ class Server:
 		"""
 		return HttpInterface(self.node, self.storage)
 
-	async def listen(self, port: int, interface: str = "0.0.0.0") -> None:
+	async def listen(self) -> None:
 		"""
-		Create UDP and HTTP listeners on an interface at a given port
-
-		Parameters
-		----------
-			port: int
-				Port on which to bind inteface
-			interface: str
-				Interface on which to listen (default = 0.0.0.0)
+		Create UDP and HTTP listeners on the server
 		"""
-		self.node.ip = interface
-		self.node.port = port
-
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
-												local_addr=(interface, port))
-		log.info("%s UDP listening at %s:%i", self.node, interface, port)
+												local_addr=(self.node.ip, self.node.port))
+		log.info("%s UDP listening", self.node, self.node.ip, self.node.port)
 
 		self.udp_transport, self.protocol = await listen
 
@@ -119,8 +110,8 @@ class Server:
 
 		# pylint: disable=bad-continuation
 		self.listener = await loop.create_server(self._create_http_iface,
-												host=interface, port=port)
-		log.info("%s HTTP listening at %s:%i", self.node, interface, port)
+												host=self.node.ip, port=self.node.port)
+		log.info("%s HTTP listening", self.node)
 
 		asyncio.ensure_future(self.listener.serve_forever())
 
@@ -153,7 +144,7 @@ class Server:
 
 		# now republish keys older than one hour
 		for node in self.storage.iter_older_than(3600):
-			# node = Node(hex_to_int_digest(hexkey), type=NodeType.Resource, value=value)
+			# node = Node(hex_to_int_digest(hexkey), node_type=NodeType.Resource, value=value)
 			log.debug("%s republishing node %s from store", self.node, node)
 			await self.set_digest(node)
 
@@ -214,7 +205,7 @@ class Server:
 				None if ping was unsuccessful, or peer as Node if ping
 				was successful
 		"""
-		result = await self.protocol.ping(addr, self.node.digest_id)
+		result = await self.protocol.ping(addr, self.node.digest)
 		return Node(result[1], addr[0], addr[1]) if result[0] else None
 
 	async def get(self, key: int) -> asyncio.Future:
@@ -241,7 +232,7 @@ class Server:
 		if result is not None:
 			return result
 
-		node = Node(dkey, type=NodeType.Resource)
+		node = Node(dkey, node_type=NodeType.Resource)
 		nearest = self.protocol.router.find_neighbors(node)
 
 		if not nearest:
@@ -267,7 +258,7 @@ class Server:
 				Callback to set_digest which finds nodes on which to store key
 		"""
 		if not node.has_valid_value():
-			raise TypeError("Value must be of type int, float, bool, str, or bytes")
+			log.error("Value must be of type int, float, bool, str, or bytes")
 		log.info("setting '%s' = '%s' on network", str(node), node.value)
 		return await self.set_digest(node)
 
@@ -279,7 +270,7 @@ class Server:
 		Parameters
 		----------
 			node: Node
-				Node to be set (where node.type == NodeType.Resource)
+				Node to be set (where node.node_type == NodeType.Resource)
 
 		Returns
 		-------
@@ -300,7 +291,7 @@ class Server:
 		biggest = max([n.distance_to(node) for n in nodes])
 		if self.node.distance_to(node) < biggest:
 			self.storage.set(node)
-		results = [self.protocol.call_store(n, node.digest_id, node.value) for n in nodes]
+		results = [self.protocol.call_store(n, node.digest, node.value) for n in nodes]
 
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
@@ -312,7 +303,7 @@ class Server:
 
 		Parameters
 		----------
-			fname: strtest_can_set_and_get
+			fname: str
 				File location where in which to write state
 		"""
 		fname = fname or self.statefile
@@ -320,9 +311,11 @@ class Server:
 
 		# pylint: disable=bad-continuation
 		data = {
+			'interface': self.node.ip,
+			'port': self.node.port,
 			'ksize': self.ksize,
 			'alpha': self.alpha,
-			'id': self.node.digest_id,
+			'id': self.node.digest,
 			'neighbors': self.bootstrappable_neighbors()
 		}
 
@@ -355,7 +348,7 @@ class Server:
 		with open(fname, 'rb') as file:
 			data = pickle.load(file)
 
-		svr = Server(data['id'], ksize=data['ksize'], alpha=data['alpha'])
+		svr = Server(data['interface'], data['port'], ksize=data['ksize'], alpha=data['alpha'])
 
 		if data['neighbors']:
 			asyncio.ensure_future(svr.bootstrap(data['neighbors']))
