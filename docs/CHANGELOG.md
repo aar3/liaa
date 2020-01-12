@@ -27,5 +27,5 @@
    - [bugfix] ensure crawler working properly (ISSUE-28)
       - remove sphinx docs and add new docs
       - update CI to push on version branches and master
-      - base node IDs off of ip:port, and search keys
+      - base node IDs off of ip:port, and search keys and adjust tests
    
