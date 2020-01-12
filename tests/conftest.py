@@ -9,33 +9,23 @@ import pytest
 # pylint: disable=bad-continuation
 from liaa.protocol import Header
 from liaa.network import Server
-from liaa.node import Node, NodeType
+from liaa.node import Node, PeerNode, ResourceNode
 from liaa.protocol import KademliaProtocol
 from liaa.routing import RoutingTable, KBucket
 from liaa.storage import StorageIface
-from liaa.utils import rand_digest_id, rand_str
+from liaa.utils import rand_str
 
-
-@pytest.yield_fixture
-def bootstrap_node(event_loop):
-	server = Server()
-	event_loop.run_until_complete(server.listen(8468))
-
-	try:
-		yield ('127.0.0.1', 8468)
-	finally:
-		server.stop()
 
 # pylint: disable=redefined-outer-name
 @pytest.fixture()
-def mknode():
-	def _mknode(key=None, node_type=None, value=None):
+def mknode(mkpeer, mkresource):
+	def _mknode():
 		"""
 		Make a node.  Created a random id if not specified.
 		"""
-		key = key or rand_str()
-		node_type = node_type or NodeType.Peer
-		return Node(key, node_type, value)
+		if random.choice([0, 1]) == 0:
+			return mkpeer(key)
+		return mkresource(key, value=rand_str())
 	return _mknode
 
 @pytest.fixture()
@@ -45,7 +35,7 @@ def mkpeer():
 		Make a peer node.  Created a random id if not specified.
 		"""
 		key = key or f"127.0.0.1:{random.randint(1000, 9000)}"
-		return Node(key, NodeType.Peer)
+		return PeerNode(key)
 	return _mkpeer
 
 
@@ -56,21 +46,8 @@ def mkresource():
 		Make a resource node.  Created a random id if not specified.
 		"""
 		key = key or rand_str()
-		value = value or rand_str().encode()
-		return Node(key, NodeType.Resource, value)
+		return ResourceNode(key, value)
 	return _mkresource
-
-
-@pytest.fixture()
-def mkrsrc():
-	def _mkrsrc(key=None, value=None):
-		"""
-		Create a fake resource node
-		"""
-		key = key or rand_str()
-		value = value or rand_str()
-		return Node(key=key, node_type=NodeType.Resource, value=value)
-	return _mkrsrc
 
 
 @pytest.fixture()

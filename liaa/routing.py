@@ -195,7 +195,7 @@ class RoutingTable:
 		nodes = []
 		for neighbor in TableTraverser(self, node):
 			notexcluded = exclude is None or not neighbor.is_same_node(exclude)
-			if neighbor.digest != node.digest and notexcluded:
+			if neighbor.key != node.key and notexcluded:
 				heapq.heappush(nodes, (node.distance_to(neighbor), neighbor))
 			if len(nodes) == k:
 				break
