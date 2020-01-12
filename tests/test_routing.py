@@ -5,8 +5,7 @@ import pytest
 
 from liaa.routing import KBucket, TableTraverser, RoutingTable
 from liaa.network import KademliaProtocol
-from liaa.node import NodeType, Node
-from liaa.utils import rand_str
+from liaa.utils import rand_str, join_addr
 
 
 class TestKBucket:
@@ -192,7 +191,11 @@ class TestTableTraverser:
 			[node8, node9]
 		Test traver result starting from node4.
 		"""
-		nodes = [mkpeer() for x in range(10)]
+		nodes = []
+		for port in range(8000, 8010):
+			key = join_addr(("0.0.0.0", port))
+			nodes.append(mkpeer(key))
+			nodes.append(mk)
 
 		buckets = []
 		for i in range(5):
@@ -201,29 +204,23 @@ class TestTableTraverser:
 			bucket.add_node(nodes[2 * i + 1])
 			buckets.append(bucket)
 
-		# FIXME: refactor this tests accordingly
-		
-		# replace router's bucket with our test buckets
 		fake_server.router.buckets = buckets
 
-		# expected nodes order
 		# pylint: disable=bad-continuation
 		expected_nodes = [
-			nodes[5],
-			nodes[4],
-			nodes[3],
-			nodes[2],
-			nodes[7],
-			nodes[6],
 			nodes[1],
 			nodes[0],
+			nodes[3],
+			nodes[2],
+			nodes[5],
+			nodes[4],
+			nodes[7],
+			nodes[6],
 			nodes[9],
 			nodes[8],
 		]
 
-		start_node = nodes[4]
+		start_node = nodes[0]
 		table_traverser = TableTraverser(fake_server.router, start_node)
 		for index, node in enumerate(table_traverser):
-			# FIXME: traverser should work
-			# assert node == expected_nodes[index]
-			pass
+			assert node == expected_nodes[index]

@@ -5,10 +5,10 @@ import pickle
 from typing import List, Optional, Tuple
 
 from liaa.crawling import NodeSpiderCrawl, ValueSpiderCrawl
-from liaa.node import Node, NodeType
+from liaa.node import Node, PeerNode, ResourceNode
 from liaa.protocol import KademliaProtocol, HttpInterface
 from liaa.storage import StorageIface
-from liaa.utils import int_to_digest, rand_digest_id, join_addr
+from liaa.utils import int_to_digest, join_addr
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -36,7 +36,7 @@ class Server:
 			alpha: int
 				The alpha parameter from the paper (default = 3)
 		"""
-		self.node = Node(key=join_addr((interface, port)), node_type=NodeType.Peer)
+		self.node = PeerNode(key=join_addr((interface, port)))
 		log.info("Using storage interface: %s", StorageIface.__name__)
 		self.storage = StorageIface(self.node)
 		self.ksize = ksize
@@ -101,7 +101,7 @@ class Server:
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
 												local_addr=(self.node.ip, self.node.port))
-		log.info("%s UDP listening", self.node, self.node.ip, self.node.port)
+		log.info("%s UDP listening", self.node)
 
 		self.udp_transport, self.protocol = await listen
 
@@ -132,23 +132,20 @@ class Server:
 		(per section 2.3 of the paper).
 		"""
 		results: List[asyncio.Future] = []
-		for digest_id in self.protocol.get_refresh_ids():
-			node = Node(digest_id)
+		for key in self.protocol.get_refresh_ids():
+			node = Node(key, node_type='any', value=None)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
 			log.debug("%s refreshing routing table on %i nearest", self.node, len(nearest))
 			spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 			results.append(spider.find())
 
-		# do our crawling
 		await asyncio.gather(*results)
 
-		# now republish keys older than one hour
 		for node in self.storage.iter_older_than(3600):
-			# node = Node(hex_to_int_digest(hexkey), node_type=NodeType.Resource, value=value)
 			log.debug("%s republishing node %s from store", self.node, node)
 			await self.set_digest(node)
 
-	def bootstrappable_neighbors(self) -> List["Node"]:
+	def bootstrappable_neighbors(self) -> List["PeerNode"]:
 		"""
 		Get a list of (ip, port) tuple pairs suitable for use as an argument to
 		the bootstrap method.
@@ -160,10 +157,10 @@ class Server:
 
 		Returns
 		-------
-			List[Node]:
+			List[PeerNode]:
 				List of peers suitable for bootstrap use
 		"""
-		neighbors: List["Node"] = self.protocol.router.find_neighbors(self.node)
+		neighbors = self.protocol.router.find_neighbors(self.node)
 		return [tuple(n)[-2:] for n in neighbors]
 
 	async def bootstrap(self, addrs: List[Tuple[str, int]]) -> asyncio.Future:
@@ -189,7 +186,7 @@ class Server:
 		spider = NodeSpiderCrawl(self.protocol, self.node, nodes, self.ksize, self.alpha)
 		return await spider.find()
 
-	async def bootstrap_node(self, addr: Tuple[str, int]) -> Optional["Node"]:
+	async def bootstrap_node(self, addr: Tuple[str, int]) -> Optional["PeerNode"]:
 		"""
 		Ping a given address so that both `addr` and `self.node` can know
 		about one another
@@ -201,21 +198,21 @@ class Server:
 
 		Returns
 		-------
-			Optiona[Node]:
+			Optiona[PeerNode]:
 				None if ping was unsuccessful, or peer as Node if ping
 				was successful
 		"""
-		result = await self.protocol.ping(addr, self.node.digest)
-		return Node(result[1], addr[0], addr[1]) if result[0] else None
+		result = await self.protocol.ping(addr, self.node.key)
+		return PeerNode(key=join_addr(addr[0], addr[1])) if result[0] else None
 
-	async def get(self, key: int) -> asyncio.Future:
+	async def get(self, key: str) -> asyncio.Future:
 		"""
 		Crawl the current node's known network in order to find a given key. This
 		is the interface for grabbing a key from the network
 
 		Parameters
 		----------
-			key: int
+			key: str
 				Key to find in network
 
 		Returns
@@ -225,14 +222,13 @@ class Server:
 				either when the value is find or the search is exhausted
 		"""
 		log.info("%s looking up key %s", self.node, key)
-		dkey = int_to_digest(key)
 
 		# if this node has it, return it
-		result = self.storage.get(dkey.hex())
+		result = self.storage.get(key)
 		if result is not None:
 			return result
 
-		node = Node(dkey, node_type=NodeType.Resource)
+		node = ResourceNode(key)
 		nearest = self.protocol.router.find_neighbors(node)
 
 		if not nearest:
@@ -262,7 +258,7 @@ class Server:
 		log.info("setting '%s' = '%s' on network", str(node), node.value)
 		return await self.set_digest(node)
 
-	async def set_digest(self, node: "Node") -> bool:
+	async def set_digest(self, node: "ResourceNode") -> bool:
 		"""
 		Set the given SHA1 digest key (bytes) to the given value in the
 		network.
@@ -270,7 +266,7 @@ class Server:
 		Parameters
 		----------
 			node: Node
-				Node to be set (where node.node_type == NodeType.Resource)
+				Node to be set (where node.node_type == 'resource')
 
 		Returns
 		-------
@@ -291,7 +287,7 @@ class Server:
 		biggest = max([n.distance_to(node) for n in nodes])
 		if self.node.distance_to(node) < biggest:
 			self.storage.set(node)
-		results = [self.protocol.call_store(n, node.digest, node.value) for n in nodes]
+		results = [self.protocol.call_store(n, node.key, node.value) for n in nodes]
 
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
@@ -315,7 +311,7 @@ class Server:
 			'port': self.node.port,
 			'ksize': self.ksize,
 			'alpha': self.alpha,
-			'id': self.node.digest,
+			'id': self.node.key,
 			'neighbors': self.bootstrappable_neighbors()
 		}
 

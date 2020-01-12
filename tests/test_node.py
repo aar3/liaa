@@ -2,26 +2,30 @@ import random
 import hashlib
 from collections.abc import Iterable
 
-from liaa.node import Node, NodeHeap, NodeType
+from liaa.node import Node, NodeHeap, PeerNode, ResourceNode
 from liaa.utils import hex_to_int, pack
 
 
 class TestNode:
 	# pylint: disable=no-self-use
-	def test_node_instance_attributes(self):
-		node = Node(key="127.0.0.1:8080", node_type=NodeType.Peer)
-
+	def test_peer_node(self):
+		node = PeerNode(key='127.0.0.1:8080')
+		assert isinstance(node, PeerNode)
 		assert node.ip == "127.0.0.1"
 		assert node.port == 8080
-		assert node.node_type == NodeType.Peer
+		assert node.node_type == 'peer'
 		assert not node.value
-
-		assert isinstance(node.long_id, int)
-		assert isinstance(node.digest, bytes)
 		assert node.digest == pack("I", node.key)
 		assert node.long_id < 2**160
-
 		assert str(node) == "peer@127.0.0.1:8080"
+
+	def test_resource_node(self):
+		node = ResourceNode(key='my-node', value=b'123')
+		assert isinstance(node, ResourceNode)
+		assert node.node_type == 'resource'
+		assert node.digest == pack("I", node.key)
+		assert node.long_id < 2**160
+		assert str(node) == 'resource@my-node'
 
 	def test_distance_calculation(self, mkpeer):
 

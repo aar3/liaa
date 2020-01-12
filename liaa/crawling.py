@@ -82,7 +82,7 @@ class SpiderCrawl:
 
 		dicts = {}
 		for peer in self.nearest.get_uncontacted()[:count]:
-			dicts[peer.digest] = rpcmethod(peer, self.node)
+			dicts[peer.key] = rpcmethod(peer, self.node)
 			self.nearest.mark_contacted(peer)
 		found = await gather_dict(dicts)
 		return await self._nodes_found(found)
@@ -234,7 +234,7 @@ class ValueSpiderCrawl(SpiderCrawl):
 		peer = self.nearest_without_value.popleft()
 		if peer:
 			log.debug("%s asking nearest node %i to store %s", self.node, peer.long_id, str(value))
-			await self.protocol.call_store(peer, self.node.digest, value)
+			await self.protocol.call_store(peer, self.node.key, value)
 		return value
 
 

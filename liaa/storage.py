@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from itertools import takewhile
 from typing import Any, List, Optional, Tuple
 
-from liaa.node import Node, NodeType
+from liaa.node import Node, ResourceNode, PeerNode
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -44,13 +44,13 @@ class IStorage:
 
 	Parameters
 	----------
-		node: Node
+		node: PeerNode
 			The node representing this peer
 		ttl: int
 			Max age that items can live untouched before being pruned
 			(default=604800 seconds = 1 week)
 	"""
-	def __init__(self, node: "Node", ttl: int = 604800):
+	def __init__(self, node: "PeerNode", ttl: int = 604800):
 		self.node = node
 		self.ttl = ttl
 		kstore_dir = os.path.join(os.path.expanduser("~"), ".liaa")
@@ -65,23 +65,23 @@ class IStorage:
 
 
 class EphemeralStorage(IStorage):
-	def __init__(self, node: "Node", ttl=604800):
+	def __init__(self, node: "PeerNode", ttl=604800):
 		"""
 		EphemeralStorage
 
 		Parameters
 		----------
-			node: Node
+			node: PeerNode
 				The node representing this peer
 			ttl: int
-			Max age that items can live untouched before being pruned
+				Max age that items can live untouched before being pruned
 				(default=604800 seconds = 1 week)
 		"""
 		super(EphemeralStorage, self).__init__(node, ttl)
 		self.data = OrderedDict()
 
 	@pre_prune()
-	def get(self, key: str, default: Optional[bytes] = None) -> Optional["Node"]:
+	def get(self, key: str) -> Optional["ResourceNode"]:
 		"""
 		Retrieve a node from storage
 
@@ -94,23 +94,23 @@ class EphemeralStorage(IStorage):
 
 		Returns
 		-------
-			Optional[Node]:
+			Optional[ResourceNode]:
 				Node if node is in storage, else `default`
 		"""
 		log.debug("%s fetching Node %s", self.node, key)
 		if key in self:
 			_, value = self.data[key]
-			return Node(key=key, node_type=NodeType.Resource, value=value)
+			return ResourceNode(key, value)
 		log.debug("Node %s not found on node %s", key, self.node)
-		return default
+		return None
 
-	def set(self, node: "Node"):
+	def set(self, node: "ResourceNode"):
 		"""
 		Save a given Node in storage
 
 		Parameters
 		----------
-			node: Node
+			node: ResourceNode
 				Node to be saved
 		"""
 		log.debug("%s setting node %s", self.node, node.key)
@@ -175,15 +175,11 @@ class EphemeralStorage(IStorage):
 		return zip(ikeys, ibirthday, ivalues)
 
 	@pre_prune()
-	def __repr__(self) -> str:
-		return repr(self.data)
-
-	@pre_prune()
 	def __iter__(self) -> Iterable:
 		log.debug("%s iterating over %i items in storage", self.node, len(self.data))
 		ikeys = self.data.keys()
 		ivalues = map(operator.itemgetter(1), self.data.values())
-		nodes = [Node(key=p[0], node_type=NodeType.Resource, value=p[1]) for p in zip(ikeys, ivalues)]
+		nodes = [ResourceNode(key=p[0], value=p[1]) for p in zip(ikeys, ivalues)]
 
 		for node in nodes:
 			yield node
@@ -198,13 +194,13 @@ class EphemeralStorage(IStorage):
 
 class DiskStorage(IStorage):
 	# pylint: disable=bad-continuation
-	def __init__(self, node: "Node", ttl=604800):
+	def __init__(self, node: "ResourceNode", ttl=604800):
 		"""
 		DiskStorage
 
 		Parameters
 		----------
-			node: Node
+			node: ResourceNode
 				The node representing this peer
 			ttl: int
 				Max age that items can live untouched before being pruned
@@ -217,7 +213,7 @@ class DiskStorage(IStorage):
 			os.mkdir(self.content_dir)
 
 	@pre_prune()
-	def get(self, key: str, default: Optional[bytes] = None) -> Optional["Node"]:
+	def get(self, key: str) -> Optional["Node"]:
 		"""
 		Retrieve a node from storage
 
@@ -235,17 +231,17 @@ class DiskStorage(IStorage):
 		"""
 		log.debug("%s fetching node %s", self.node, key)
 		if key in self:
-			return Node(key=key, node_type=NodeType.Resource, value=self._load_data(key))
+			return ResourceNode(key, value=self._load_data(key))
 		log.debug("Node %s not found on node %s", key, self.node)
-		return default
+		return None
 
-	def set(self, node: "Node") -> None:
+	def set(self, node: "PeerNode") -> None:
 		"""
 		Save a given Node in storage
 
 		Parameters
 		----------
-			node: Node
+			node: PeerNode
 				Node to be saved
 		"""
 		if node.key in self:
@@ -299,10 +295,6 @@ class DiskStorage(IStorage):
 		"""
 		List all nodes in storage
 
-		TODO: ideally, we shouldn't have to filter out the state file
-		like this, we should maybe keep all config/state files in the parent
-		directory, and the actual data files in a sub-directory
-
 		Returns
 		-------
 			List[str]:
@@ -310,13 +302,13 @@ class DiskStorage(IStorage):
 		"""
 		return os.listdir(self.content_dir)
 
-	def _persist_data(self, node: "Node") -> None:
+	def _persist_data(self, node: "ResourceNode") -> None:
 		"""
 		Save a given node's value to disk
 
 		Parameters
 		----------
-			node: Node
+			node: ResourceNode
 				The node to save
 		"""
 		fname = os.path.join(self.content_dir, node.key)
@@ -369,7 +361,7 @@ class DiskStorage(IStorage):
 		log.debug("%s iterating over %i items in storage", self.node, len(self.contents()))
 		ikeys = self.contents()
 		ivalues = [self._load_data(k) for k in ikeys]
-		nodes = [Node(key=p[0], node_type=NodeType.Resource, value=p[1]) for p in zip(ikeys, ivalues)]
+		nodes = [ResourceNode(key=p[0], value=p[1]) for p in zip(ikeys, ivalues)]
 		for node in nodes:
 			yield node
 
@@ -377,12 +369,8 @@ class DiskStorage(IStorage):
 		return key in self.contents()
 
 	@pre_prune()
-	def __repr__(self) -> str:
-		return repr(self.contents())
-
-	@pre_prune()
 	def __len__(self) -> int:
 		return len(self.contents())
 
 
-StorageIface = DiskStorage
+StorageIface = EphemeralStorage

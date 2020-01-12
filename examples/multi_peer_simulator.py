@@ -21,8 +21,8 @@ import random
 import threading
 
 from liaa.network import Server
-from liaa.utils import rand_str, rand_digest_id
-from liaa.node import Node, NodeType
+from liaa.utils import rand_str
+from liaa.node import ResourceNode, PeerNode
 
 # pylint: disable=invalid-name
 
@@ -41,17 +41,17 @@ log.setLevel(logging.DEBUG)
 
 async def make_fake_data(server):
 	while True:
-		resource = Node(rand_digest_id(), node_type=NodeType.Resource, value=rand_str())
-		await server.set(resource)
+		node = ResourceNode(key=rand_str(), value=rand_str().encode())
+		await server.set(node)
 		await asyncio.sleep(5)
 
 
-def run_server(loop, server, port, neighbor_ports):
+def run_server(loop, server, neighbor_ports):
 	"""
 	Start a given server on a given port using a given event loop
 	"""
 	loop.set_debug(True)
-	loop.run_until_complete(server.listen(port))
+	loop.run_until_complete(server.listen())
 
 	bootstrap_peers = [(host, p) for p in neighbor_ports]
 	loop.create_task(server.bootstrap(bootstrap_peers))
@@ -64,19 +64,19 @@ def main():
 	handles = []
 	servers = []
 
-	for _ in range(num_peers):
+	ports = list(range(start_port, (start_port + num_peers)))
+
+	for i in range(num_peers):
 		ksize = random.randint(14, 20)
 		alpha = random.randint(2, 6)
-		server = Server(ksize=ksize, alpha=alpha)
+		server = Server("0.0.0.0", ports[i], ksize=ksize, alpha=alpha)
 		servers.append(server)
 
-	ports = range(start_port, (start_port + num_peers))
-
-	for server, port in zip(servers, ports):
-		boostrap_port_pool = [p for p in ports if p != port]
+	for server in servers:
+		boostrap_port_pool = [p for p in ports if p != server.node.port]
 		loop = asyncio.new_event_loop()
 		neighbor_ports = random.sample(boostrap_port_pool, random.randint(1, 3))
-		handle = threading.Thread(target=run_server, args=(loop, server, port, neighbor_ports))
+		handle = threading.Thread(target=run_server, args=(loop, server, neighbor_ports))
 		handle.start()
 
 	for handle in handles:

@@ -3,9 +3,7 @@ import os
 
 from liaa.network import Server
 from liaa.protocol import KademliaProtocol
-# from liaa.node import Resource
-from liaa.node import Node, NodeType
-from liaa.utils import rand_str, rand_digest_id
+from liaa.utils import rand_str
 
 
 PORT = 8765
