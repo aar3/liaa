@@ -9,9 +9,9 @@ import time
 from collections import OrderedDict
 from collections.abc import Iterable
 from itertools import takewhile
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
-from liaa.node import Node, ResourceNode, PeerNode
+from liaa.node import ResourceNode
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 

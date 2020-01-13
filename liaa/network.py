@@ -8,7 +8,7 @@ from liaa.crawling import NodeSpiderCrawl, ValueSpiderCrawl
 from liaa.node import Node, PeerNode, ResourceNode
 from liaa.protocol import KademliaProtocol, HttpInterface
 from liaa.storage import StorageIface
-from liaa.utils import int_to_digest, join_addr
+from liaa.utils import join_addr
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -202,7 +202,7 @@ class Server:
 				was successful
 		"""
 		result = await self.protocol.ping(addr, self.node.key)
-		return PeerNode(key=join_addr(addr[0], addr[1])) if result[0] else None
+		return PeerNode(key=join_addr((addr[0], addr[1]))) if result[0] else None
 
 	async def get(self, key: str) -> asyncio.Future:
 		"""

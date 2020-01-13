@@ -184,6 +184,7 @@ class RoutingTable:
 			if node.long_id < bucket.range[1]:
 				index = i
 				break
+		# we should never be here, but make linter happy
 		return index
 
 	def get_bucket_for(self, node):

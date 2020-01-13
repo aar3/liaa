@@ -24,8 +24,8 @@ def mknode(mkpeer, mkresource):
 		Make a node.  Created a random id if not specified.
 		"""
 		if random.choice([0, 1]) == 0:
-			return mkpeer(key)
-		return mkresource(key, value=rand_str())
+			return mkpeer()
+		return mkresource()
 	return _mknode
 
 @pytest.fixture()

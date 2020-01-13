@@ -334,9 +334,9 @@ class HttpInterface(asyncio.Protocol):
 		log.debug("Received new http message %s", data)
 
 		if rawheaders.startswith("GET"):
-			response = self.fetch_data(unmarshalled.get("key"))
+			response = self.fetch_data(unmarshalled.get("data"))
 		elif rawheaders.startswith("PUT"):
-			response = self.call_store(rawbody)
+			response = self.call_store(unmarshalled.get("key"), rawbody)
 		else:
 			body = json.dumps({"details": "Not implemented"})
 			response = self.pack_response(501, "NOT IMPLEMENTED", body)
@@ -492,6 +492,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		self.welcome_if_new(source)
 		return self.source_node.key
 
+	# pylint: disable=unused-argument
 	def rpc_store(self, sender: "PeerNode", node_id: str, key: str, value: bytes) -> bool:
 		"""
 		Store data from a given sender
@@ -512,7 +513,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 			bool:
 				Indicator of successful operation
 		"""
-		source = Node(join_addr(sender[0], sender[1]))
+		source = PeerNode(join_addr((sender[0], sender[1])))
 		self.welcome_if_new(source)
 		# pylint: disable=bad-continuation
 		log.debug("%s got store request from %s, storing %iB at %s",

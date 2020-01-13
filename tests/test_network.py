@@ -5,9 +5,6 @@ from liaa.network import Server
 from liaa.protocol import KademliaProtocol
 
 
-PORT = 8765
-
-
 class TestServer:
 
 	loop = asyncio.get_event_loop()
