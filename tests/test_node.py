@@ -1,27 +1,27 @@
-import random
-import hashlib
-from collections.abc import Iterable
-
-from liaa.node import Node, NodeHeap, NodeType
+from liaa.node import Node, NodeHeap, PeerNode, ResourceNode
 from liaa.utils import hex_to_int, pack
 
 
 class TestNode:
 	# pylint: disable=no-self-use
-	def test_node_instance_attributes(self):
-		node = Node(key="127.0.0.1:8080", node_type=NodeType.Peer)
-
+	def test_peer_node(self):
+		node = PeerNode(key='127.0.0.1:8080')
+		assert isinstance(node, PeerNode)
 		assert node.ip == "127.0.0.1"
 		assert node.port == 8080
-		assert node.node_type == NodeType.Peer
+		assert node.node_type == 'peer'
 		assert not node.value
-
-		assert isinstance(node.long_id, int)
-		assert isinstance(node.digest, bytes)
 		assert node.digest == pack("I", node.key)
 		assert node.long_id < 2**160
-
 		assert str(node) == "peer@127.0.0.1:8080"
+
+	def test_resource_node(self):
+		node = ResourceNode(key='my-node', value=b'123')
+		assert isinstance(node, ResourceNode)
+		assert node.node_type == 'resource'
+		assert node.digest == pack("I", node.key)
+		assert node.long_id < 2**160
+		assert str(node) == 'resource@my-node'
 
 	def test_distance_calculation(self, mkpeer):
 
@@ -42,7 +42,7 @@ class TestNode:
 
 	def test_node_iter(self, mkpeer):
 		node = mkpeer()
-		assert tuple(node) == (node.digest, node.ip, node.port)
+		assert tuple(node) == (node.key, node.ip, node.port)
 
 
 class TestNodeHeap:
@@ -56,7 +56,7 @@ class TestNodeHeap:
 		nodes = [mkpeer() for _ in range(3)]
 		for node in nodes:
 			heap.push(node)
-		node = heap.get_node(nodes[0].digest)
+		node = heap.get_node(nodes[0].key)
 		assert isinstance(node, Node)
 
 	def test_get_node_returns_none_when_node_not_exists(self, mkpeer):
@@ -105,7 +105,7 @@ class TestNodeHeap:
 		node = NodeHeap(mkpeer(), maxsize)
 		assert not node
 
-		for digit in range(10):
+		for _ in range(10):
 			node.push(mkpeer())
 
 		assert len(node) == maxsize

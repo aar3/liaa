@@ -42,7 +42,7 @@ def split_addr(addr: "str") -> Tuple[str, int]:
 	return host, int(port)
 
 
-def rand_str(num=20) -> str:
+def rand_str(num=16) -> str:
 	"""
 	Create a random string array
 	"""
@@ -273,4 +273,3 @@ def pack(fmt: str, arr: str) -> bytes:
 def unpack(fmt: str, arr: bytes) -> Tuple[int, bytes]:
 	size = struct.calcsize(fmt)
 	return struct.unpack(fmt, arr[:size]), arr[size:]
-

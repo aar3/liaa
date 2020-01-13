@@ -1,25 +1,17 @@
 from operator import itemgetter
 import heapq
 import logging
-from typing import Optional, List, Any
+from typing import Optional, List
 
-from liaa.utils import hex_to_int, check_dht_value_type, digest_to_int, join_addr, split_addr, pack
+from liaa.utils import hex_to_int, check_dht_value_type, split_addr, pack
 
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-# pylint: disable=too-few-public-methods
-class NodeType:
-	Peer = "peer"
-	Resource = "resource"
-
-
 # pylint: disable=too-many-instance-attributes
 class Node:
-	# pylint: disable=bad-continuation
-	def __init__(self, key: Optional[str] = None, node_type: int = NodeType.Peer,
-		value: Optional[Any] = None):
+	def __init__(self, key: str, node_type: str, value: Optional[bytes] = None):
 		"""
 		Node
 
@@ -36,12 +28,13 @@ class Node:
 				A value between 0 and 2^160 (as byte array)
 			key: str
 				String identifier or this node
-					is `IP:PORT` if node_type == NodeType.Peer
+					is `IP:PORT` if node_type == 'peer'
 			node_type: int
 				Indicator of whether the node represents a peer or a resource in
 				the network
-			value: Optional[Any]
-				Payload associated with node (if self.node_type == NodeType.Resource)
+					- peer, resource, any
+			value: Optional[bytes]
+				Payload associated with node (if self.node_type == 'resource')
 		"""
 		self.node_type = node_type
 		self.value = value
@@ -50,7 +43,7 @@ class Node:
 		self.ip = None
 		self.port = None
 
-		if self.node_type == NodeType.Peer:
+		if self.node_type == "peer":
 			self.ip, self.port = split_addr(self.key)
 
 		self.digest = pack("I", self.key)
@@ -60,34 +53,41 @@ class Node:
 	def has_valid_value(self) -> bool:
 		return check_dht_value_type(self.value)
 
-	def is_same_node(self, other: "Node") -> bool:
+	def is_same_node(self, other: "PeerNode") -> bool:
 		return self.key == other.key
 
-	def distance_to(self, node: "Node") -> int:
+	def distance_to(self, node: "PeerNode") -> int:
 		"""
 		Get the distance between this node and another.
 
 		Parameters
 		----------
-			node: Node
+			node: PeerNode
 				Node against which to measure key distance
 		"""
 		return self.long_id ^ node.long_id
 
-	def __eq__(self, other: "Node") -> bool:
+	def __eq__(self, other: "PeerNode") -> bool:
 		return self.key == other.key
 
 	def __iter__(self):
-		return iter([self.digest, self.ip, self.port])
+		return iter([self.key, self.ip, self.port])
 
 	def __hash__(self):
 		return self.long_id
 
-	def __repr__(self):
-		return repr([self.long_id, self.ip, self.port])
-
 	def __str__(self):
 		return self.node_type + "@" + self.key
+
+
+class PeerNode(Node):
+	def __init__(self, key):
+		super(PeerNode, self).__init__(key, node_type="peer", value=None)
+
+
+class ResourceNode(Node):
+	def __init__(self, key, value=None):
+		super(ResourceNode, self).__init__(key, node_type="resource", value=value)
 
 
 class NodeHeap:
@@ -135,9 +135,9 @@ class NodeHeap:
 			log.debug("removing peer %s from node %s", str(node), str(node))
 		self.heap = nheap
 
-	def get_node(self, digest):
+	def get_node(self, key):
 		for _, node in self.heap:
-			if node.digest == digest:
+			if node.key == key:
 				return node
 		return None
 

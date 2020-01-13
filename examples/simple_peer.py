@@ -52,8 +52,8 @@ def main():
 		print(usage())
 		sys.exit(1)
 
-	server = Server()
-	loop.run_until_complete(server.listen(int(parser.get("-p", "--port"))))
+	server = Server("0.0.0.0", int(parser.get("-p", "--port")))
+	loop.run_until_complete(server.listen())
 
 	try:
 		loop.run_forever()

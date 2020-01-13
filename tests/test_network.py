@@ -3,15 +3,12 @@ import os
 
 from liaa.network import Server
 from liaa.protocol import KademliaProtocol
-# from liaa.node import Resource
-from liaa.node import Node, NodeType
-from liaa.utils import rand_str, rand_digest_id
-
-
-PORT = 8765
 
 
 class TestServer:
+
+	loop = asyncio.get_event_loop()
+
 	# pylint: disable=no-self-use
 	def test_server_instance_is_ok(self):
 		server = Server("0.0.0.0", 8000)
@@ -20,7 +17,6 @@ class TestServer:
 		assert server.node.port == 8000
 
 	def test_server_can_start_and_stop(self, mkserver):
-		loop = asyncio.get_event_loop()
 		server = mkserver()
 
 		assert not server.udp_transport
@@ -29,7 +25,7 @@ class TestServer:
 		assert not server.save_state_loop
 		assert not server.listener
 
-		loop.run_until_complete(server.listen())
+		self.loop.run_until_complete(server.listen())
 
 		assert server.udp_transport
 		assert server.protocol
@@ -64,7 +60,7 @@ class TestServer:
 		node = mkresource()
 		# pylint: disable=protected-access
 		server.protocol = server._create_protocol()
-		result = asyncio.run(server.set_digest(node))
+		result = self.loop.run_until_complete(server.set_digest(node))
 		assert not result
 
 	def test_save_state_saves(self, sandbox, mkserver, mkpeer):
@@ -88,7 +84,7 @@ class TestServer:
 	def test_can_load_state(self, mkserver, sandbox, mkpeer):
 		server = mkserver()
 		asyncio.set_event_loop(asyncio.new_event_loop())
-		
+
 		def bootstrappable_neighbors_stub():
 			return [mkpeer(), mkpeer()]
 

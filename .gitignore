@@ -1,3 +1,16 @@
+# docs
+docs/_build
+docs/TODO
+apidoc
+
+# build
+kademlia.egg-info
+liaa.egg-info
+build
+dist
+*.pyc
+
+# general
 __pycache__
 _trial_temp
 .coverage

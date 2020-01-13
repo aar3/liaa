@@ -97,7 +97,7 @@ class TestUtils:
 	def test_rand_str(self):
 		result = rand_str()
 		assert isinstance(result, str)
-		assert len(result) == 20
+		assert len(result) == 16
 
 	def test_rand_int_id(self):
 		result = rand_int_id()
