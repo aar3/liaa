@@ -18,7 +18,6 @@ class Server:
 
 	protocol_class = KademliaProtocol
 
-	# pylint: disable=bad-continuation
 	def __init__(self, interface: str, port: int, ksize: int = 20, alpha: int = 3, **kwargs):
 		"""
 		High level view of a node instance.  This is the object that should be
