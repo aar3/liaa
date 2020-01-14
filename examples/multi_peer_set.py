@@ -18,6 +18,8 @@
 # 	In terminal tab #3
 # 		- python examples/multi_peer_set.py -p 8002 -n 127.0.0.1:8001
 
+import env
+
 import logging
 import asyncio
 import time
@@ -26,7 +28,14 @@ import getopt
 
 from liaa.network import Server
 from liaa.node import ResourceNode, PeerNode
-from liaa.utils import rand_str, split_addr, ArgsParser, str_arg_to_bool
+# pylint: disable=bad-continuation
+from liaa.utils import (
+	rand_str, 
+	split_addr, 
+	ArgsParser, 
+	str_arg_to_bool, 
+	debug_ssl_ctx
+)
 
 
 def usage():
@@ -58,6 +67,7 @@ def main():
 	loop = asyncio.get_event_loop()
 
 	server = Server("0.0.0.0", int(parser.get("-p", "--port")))
+	server.ssl_ctx = debug_ssl_ctx(server.storage.root_dir)
 
 	parser = ArgsParser()
 

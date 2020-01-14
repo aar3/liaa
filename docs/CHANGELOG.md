@@ -28,3 +28,4 @@
       - remove kademlia/ sphinx docs
       - update CI to push on version branches and master
       - base node IDs off of ip:port, and search keys and adjust tests
+   - [enhancement] add self-signed tls to http iface

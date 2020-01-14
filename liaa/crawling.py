@@ -55,7 +55,7 @@ class SpiderCrawl:
 
 		Parameters
 		-----------
-			rpcmethod: asyncio.Future
+			rpcmethod: asyncio.Handle
 				The protocol's call_find_value or call_find_node method
 
 		The process:
@@ -81,9 +81,14 @@ class SpiderCrawl:
 		self.last_ids_crawled = self.nearest.get_ids()
 
 		dicts = {}
-		for peer in self.nearest.get_uncontacted()[:count]:
-			dicts[peer.key] = rpcmethod(peer, self.node)
-			self.nearest.mark_contacted(peer)
+		for node in self.nearest.get_uncontacted()[:count]:
+			if not node.is_peer_node():
+				# pylint: disable=bad-continuation
+				log.warning("Will not execute %s on %s %s", rpcmethod.__name__,
+							node.__class__.__name__, str(node))
+				return
+			dicts[node.key] = rpcmethod(node, self.node)
+			self.nearest.mark_contacted(node)
 		found = await gather_dict(dicts)
 		return await self._nodes_found(found)
 
@@ -98,7 +103,7 @@ class ValueSpiderCrawl(SpiderCrawl):
 	# pylint: disable=bad-continuation
 	def __init__(self,
 		protocol: "KademliaProtocol",
-		node: "Node",
+		node: "ResourceNode",
 		peers: List["Node"],
 		ksize: int,
 		alpha: int
@@ -115,7 +120,7 @@ class ValueSpiderCrawl(SpiderCrawl):
 		----------
 			protocol: KademliaProtocol
 				A (kademlia) protocol instance.
-			node: Node
+			node: ResourceNode
 				representing the key we're looking for
 			peers: List[Node]
 				A list of instances that provide the entry point for the network
@@ -123,8 +128,6 @@ class ValueSpiderCrawl(SpiderCrawl):
 				The value for k based on the paper
 			alpha: int
 				The value for alpha based on the paper
-
-
 		"""
 		super(ValueSpiderCrawl, self).__init__(protocol, node, peers, ksize, alpha)
 
@@ -136,13 +139,13 @@ class ValueSpiderCrawl(SpiderCrawl):
 		"""
 		A wrapper for the base class's _find, where we attempt to find the
 		closest value requested using the protocols call_find_value rpc method
+
 		Returns
 		-------
-			Optional[Any]:
-				Where Any is either:
-					(1) _find, if we did not find key, but have peers left to search
-					(2) None, if we've searched all peers without finding key
-					(3) _handle_found_values, if we found values related to our key
+			asyncio.Future:
+				(1) _find, if we did not find key, but have peers left to search
+				(2) None, if we've searched all peers without finding key
+				(3) _handle_found_values, if we found values related to our key
 		"""
 		return await self._find(self.protocol.call_find_value)
 
@@ -264,7 +267,7 @@ class NodeSpiderCrawl(SpiderCrawl):
 				Responses received from peer nodes via NodeCrawl execution
 
 			Where Any can include:
-				List[Tuple[int, str, int]] representing peer nodes
+				List[Tuple[str, str, int]] representing peer nodes
 				Dict[str, Any] representing found values
 
 		Returns

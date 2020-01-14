@@ -15,19 +15,23 @@
 # -------
 # python examples/multi_peer_simulator.py
 
+import env
+
+import os
+import sys
 import logging
 import asyncio
 import random
 import threading
 
 from liaa.network import Server
-from liaa.utils import rand_str
+from liaa.utils import rand_str, debug_ssl_ctx
 from liaa.node import ResourceNode, PeerNode
 
 # pylint: disable=invalid-name
 
 host = "127.0.0.1"
-num_peers = 20
+num_peers = 4  # minimum of 4
 start_port = 8000
 
 
@@ -70,6 +74,7 @@ def main():
 		ksize = random.randint(14, 20)
 		alpha = random.randint(2, 6)
 		server = Server("0.0.0.0", ports[i], ksize=ksize, alpha=alpha)
+		server.ssl_ctx = debug_ssl_ctx(server.storage.root_dir)
 		servers.append(server)
 
 	for server in servers:

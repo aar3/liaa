@@ -3,6 +3,8 @@ import operator
 import random
 import string
 import struct
+import os
+import ssl
 import asyncio
 from typing import Dict, Any, List, Union, Tuple, Optional
 
@@ -273,3 +275,22 @@ def pack(fmt: str, arr: str) -> bytes:
 def unpack(fmt: str, arr: bytes) -> Tuple[int, bytes]:
 	size = struct.calcsize(fmt)
 	return struct.unpack(fmt, arr[:size]), arr[size:]
+
+
+def debug_ssl_ctx(dirname: str) -> ssl.SSLContext:
+	"""
+	Create and return an SSL context used for examples/tests/debugging
+
+	Returns
+	-------
+		ssl.SSLContext
+	"""
+	certfile = os.path.join(dirname, "pub.cert")
+	keyfile = os.path.join(dirname, "priv.key")
+	if not os.path.exists(certfile) or not os.path.exists(keyfile):
+		msg = f"priv.key and pub.cert expected in {dirname}. " \
+			"Try running bin/tls to create these files"
+		raise RuntimeError(msg)
+	ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+	ssl_ctx.load_cert_chain(certfile, keyfile)
+	return ssl_ctx

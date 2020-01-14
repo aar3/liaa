@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import ssl
 import pickle
 from typing import List, Optional, Tuple
 
@@ -48,6 +49,16 @@ class Server:
 		self.refresh_loop = None
 		self.save_state_loop = None
 		self.listener = None
+
+		self._ssl_ctx = None
+
+	@property
+	def ssl_ctx(self) -> ssl.SSLContext:
+		return self._ssl_ctx
+
+	@ssl_ctx.setter
+	def ssl_ctx(self, ctx: ssl.SSLContext) -> None:
+		self._ssl_ctx = ctx
 
 	def stop(self) -> None:
 		"""
@@ -100,7 +111,7 @@ class Server:
 		# pylint: disable=bad-continuation
 		listen = loop.create_datagram_endpoint(self._create_protocol,
 												local_addr=(self.node.ip, self.node.port))
-		log.info("%s UDP listening", self.node)
+		log.info("%s udp listening at udp://%s", self.node, self.node.key)
 
 		self.udp_transport, self.protocol = await listen
 
@@ -109,8 +120,9 @@ class Server:
 
 		# pylint: disable=bad-continuation
 		self.listener = await loop.create_server(self._create_http_iface,
-												host=self.node.ip, port=self.node.port)
-		log.info("%s HTTP listening", self.node)
+												host=self.node.ip, port=self.node.port,
+												ssl=self._ssl_ctx)
+		log.info("%s https listening at https://%s", self.node, self.node.key)
 
 		asyncio.ensure_future(self.listener.serve_forever())
 
@@ -132,7 +144,7 @@ class Server:
 		"""
 		results: List[asyncio.Future] = []
 		for key in self.protocol.get_refresh_ids():
-			node = Node(key, node_type='any', value=None)
+			node = Node(key=key, node_type='any')
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
 			log.debug("%s refreshing routing table on %i nearest", self.node, len(nearest))
 			spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
@@ -231,7 +243,7 @@ class Server:
 		nearest = self.protocol.router.find_neighbors(node)
 
 		if not nearest:
-			log.warning("There are no known neighbors to get key %s", str(node))
+			log.warning("There are no known neighbors to get key %s", node.key)
 			return None
 
 		spider = ValueSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
@@ -254,7 +266,7 @@ class Server:
 		"""
 		if not node.has_valid_value():
 			log.error("Value must be of type int, float, bool, str, or bytes")
-		log.info("setting '%s' = '%s' on network", str(node), node.value)
+		log.info("%s setting '%s' = '%s' on network", str(node), node.key, node.value)
 		return await self.set_digest(node)
 
 	async def set_digest(self, node: "ResourceNode") -> bool:
@@ -275,7 +287,7 @@ class Server:
 		"""
 		nearest = self.protocol.router.find_neighbors(node)
 		if not nearest:
-			log.warning("There are no known neighbors to set key %s", node.hex)
+			log.warning("There are no known neighbors to set key %s", node.key)
 			return False
 
 		spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
