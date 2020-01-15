@@ -76,22 +76,23 @@ class RPCFindResponse:
 		"""
 		return self.response[1]['value']
 
-	def get_node_list(self) -> List["PeerNode"]:
+	def get_node_list(self) -> List["Node"]:
 		"""
 		Get the node list in the response.  If there's no value, this should
 		be set.
 
 		Returns
 		-------
-			List["PeerNode"]:
+			List["Node"]:
 				List of nodes returned from find response
 		"""
-		nodelist = self.response[1] or []
-		return [PeerNode(key) for key in nodelist]
+		nodelist: List[List[str, str, Any]] = self.response[1] or []
+		# where List[str, str, int] resembles ['0.0.0.0:8005', '0.0.0.0', 8005]
+		return [Node(key=node[0], node_type='any') for node in nodelist]
 
 
 class RPCDatagramProtocol(asyncio.DatagramProtocol):
-	def __init__(self, wait: int = 5):
+	def __init__(self, source_node: "PeerNode", wait: int = 5):
 		"""
 		RPCDatagramProtocol
 
@@ -100,9 +101,12 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 
 		Parameters
 		----------
+			source_node: PeerNode
+				Node on which this protocol is running
 			wait: int
 				Network connection timeout (default=5)
 		"""
+		self.source_node = source_node
 		self._wait = wait
 		self._outstanding_msgs: Dict[int, Tuple[asyncio.Future, asyncio.Handle]] = {}
 		self._queue = {}
@@ -131,7 +135,9 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			addr: Tuple
 				address of the peer sending the data; the exact format depends on the transport.
 		"""
-		log.debug("incoming dgram from peer at %s", join_addr(addr))
+		# pylint: disable=bad-continuation
+		log.debug("%s got incoming dgram from peer at %s", str(self.source_node),
+				join_addr(addr))
 		asyncio.ensure_future(self._solve_dgram(data, addr))
 
 	async def _solve_dgram(self, buff: bytes, address: Tuple[str, int]) -> None:
@@ -146,7 +152,9 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 				Address of sending peer
 		"""
 		if len(buff) < 22:
-			log.warning("received invalid dgram from %s, ignoring", address)
+			# pylint: disable=bad-continuation
+			log.warning("%s received invalid dgram from %s, ignoring", str(self.source_node),
+						address)
 			return
 
 		if buff[:1] == Header.Request:
@@ -170,12 +178,14 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		idf, data = buff[1:21], umsgpack.unpackb(buff[21:])
 		msgargs = (base64.b64encode(idf), address)
 		if idf not in self._outstanding_msgs:
-			log.warning("received unknown message %s from %s; ignoring", *msgargs)
+			# pylint: disable=bad-continuation
+			log.warning("%s received unknown message %s from %s; ignoring", str(self.source_node),
+						*msgargs)
 			return
 
 		# pylint: disable=bad-continuation
-		log.debug("received %iB response for message id %s from %s", sys.getsizeof(data),
-					idf, join_addr(msgargs[1]))
+		log.debug("%s %iB response for message id %s from %s", str(self.source_node),
+				sys.getsizeof(data), idf, join_addr(msgargs[1]))
 
 		if not idf in self._queue:
 			log.warning("could not mark datagram %s as received", idf)
@@ -217,7 +227,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		response = await func(address, *args)
 		txdata = Header.Response + idf + umsgpack.packb(response)
 		# pylint: disable=bad-continuation
-		log.debug("sending %iB response for msg id %s to %s", len(txdata),
+		log.debug("%s sending %iB response for msg id %s to %s", str(self.source_node), len(txdata),
 			base64.b64encode(idf), join_addr(address))
 		self.transport.sendto(txdata, address)
 
@@ -334,7 +344,7 @@ class HttpInterface(asyncio.Protocol):
 		log.debug("Received new http message %s", data)
 
 		if rawheaders.startswith("GET"):
-			response = self.fetch_data(unmarshalled.get("data"))
+			response = self.fetch_data(unmarshalled.get("key"))
 		elif rawheaders.startswith("PUT"):
 			response = self.call_store(unmarshalled.get("key"), rawbody)
 		else:
@@ -433,7 +443,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 			ksize: int
 				Size of kbuckets
 		"""
-		RPCDatagramProtocol.__init__(self)
+		super(KademliaProtocol, self).__init__(source_node)
 		self.router = RoutingTable(self, ksize, source_node)
 		self.storage = storage
 		self.source_node = source_node

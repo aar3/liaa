@@ -53,12 +53,12 @@ class IStorage:
 	def __init__(self, node: "PeerNode", ttl: int = 604800):
 		self.node = node
 		self.ttl = ttl
-		kstore_dir = os.path.join(os.path.expanduser("~"), ".liaa")
-		if not os.path.exists(kstore_dir):
-			log.debug("Liaa dir at %s not found, creating...", kstore_dir)
-			os.mkdir(kstore_dir)
+		self.root_dir = os.path.join(os.path.expanduser("~"), ".liaa")
+		if not os.path.exists(self.root_dir):
+			log.debug("Liaa dir at %s not found, creating...", self.root_dir)
+			os.mkdir(self.root_dir)
 
-		self.dir = os.path.join(kstore_dir, str(self.node.long_id))
+		self.dir = os.path.join(self.root_dir, str(self.node.long_id))
 		if not os.path.exists(self.dir):
 			log.debug("Node dir at %s not found, creating...", self.dir)
 			os.mkdir(self.dir)

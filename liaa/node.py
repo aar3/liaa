@@ -43,8 +43,10 @@ class Node:
 		self.ip = None
 		self.port = None
 
-		if self.node_type == "peer":
+		try:
 			self.ip, self.port = split_addr(self.key)
+		except ValueError:
+			pass
 
 		self.digest = pack("I", self.key)
 		self.hex = self.digest.hex()
@@ -66,6 +68,9 @@ class Node:
 				Node against which to measure key distance
 		"""
 		return self.long_id ^ node.long_id
+
+	def is_peer_node(self) -> bool:
+		return isinstance(self.ip, str) and isinstance(self.port, int)
 
 	def __eq__(self, other: "PeerNode") -> bool:
 		return self.key == other.key

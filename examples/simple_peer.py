@@ -10,13 +10,15 @@
 # -------
 # python examples/simple_peer.py -p 8000
 
+import env
+
 import logging
 import asyncio
 import sys
 import getopt
 
 from liaa.network import Server
-from liaa.utils import ArgsParser
+from liaa.utils import ArgsParser, debug_ssl_ctx
 
 
 def usage():
@@ -53,6 +55,7 @@ def main():
 		sys.exit(1)
 
 	server = Server("0.0.0.0", int(parser.get("-p", "--port")))
+	server.ssl_ctx = debug_ssl_ctx(server.storage.root_dir)
 	loop.run_until_complete(server.listen())
 
 	try:
