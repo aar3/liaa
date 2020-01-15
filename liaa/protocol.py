@@ -108,7 +108,6 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
 		self.source_node = source_node
 		self._wait = wait
-		self._outstanding_msgs: Dict[int, Tuple[asyncio.Future, asyncio.Handle]] = {}
 		self._queue = {}
 		self.transport = None
 
@@ -177,19 +176,14 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
 		idf, data = buff[1:21], umsgpack.unpackb(buff[21:])
 		msgargs = (base64.b64encode(idf), address)
-		if idf not in self._outstanding_msgs:
-			# pylint: disable=bad-continuation
-			log.warning("%s received unknown message %s from %s; ignoring", str(self.source_node),
-						*msgargs)
+
+		if not idf in self._queue:
+			log.warning("%s could not mark datagram %s as received", str(self.source_node), idf)
 			return
 
 		# pylint: disable=bad-continuation
 		log.debug("%s %iB response for message id %s from %s", str(self.source_node),
 				sys.getsizeof(data), idf, join_addr(msgargs[1]))
-
-		if not idf in self._queue:
-			log.warning("could not mark datagram %s as received", idf)
-			return
 
 		fut, timeout = self._queue[idf]
 		fut.set_result((True, data))
@@ -231,19 +225,19 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			base64.b64encode(idf), join_addr(address))
 		self.transport.sendto(txdata, address)
 
-	def _timeout(self, msg_id: int) -> None:
+	def _timeout(self, msg_id: bytes) -> None:
 		"""
 		Make a given datagram timeout
 
 		Parameters
 		----------
-			msg_id: int
+			msg_id: bytes
 				ID of datagram future to cancel
 		"""
 		args = (base64.b64encode(msg_id), self._wait)
 		log.error("Did not received reply for msg id %s within %i seconds", *args)
-		self._outstanding_msgs[msg_id][0].set_result((False, None))
-		del self._outstanding_msgs[msg_id]
+		self._queue[msg_id][0].set_result((False, None))
+		del self._queue[msg_id]
 
 	def __getattr__(self, name: str) -> Union[asyncio.Future, asyncio.Future, None]:
 
@@ -278,7 +272,6 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			future = loop.create_future()
 			timeout = loop.call_later(self._wait, self._timeout, msg_id)
 			self._queue[msg_id] = (future, timeout)
-			self._outstanding_msgs[msg_id] = (future, timeout)
 			return future
 
 		return func
@@ -370,7 +363,7 @@ class HttpInterface(asyncio.Protocol):
 		"""
 		node = ResourceNode(key, payload)
 		self.storage.set(node)
-		return self.pack_response(160, "OK", json.dumps({"details": "ok"}))
+		return self.pack_response(200, "OK", json.dumps({"details": "ok"}))
 
 	def fetch_data(self, key: Optional[str]) -> str:
 		"""
@@ -389,10 +382,10 @@ class HttpInterface(asyncio.Protocol):
 		node = self.storage.get(key)
 		# pylint: disable=bad-continuation
 		if node:
-			return self.pack_response(160, "OK",
+			return self.pack_response(200, "OK",
 					json.dumps({"details": "found", "data": str(node)}))
 		return self.pack_response(404, "NOT FOUND",
-				json.dumps({"details": "Not found", "data": str(node)}))
+				json.dumps({"details": "not found"}))
 
 	# pylint: disable=no-self-use
 	def pack_response(self, code: int, msg: str, body: Dict[str, str]) -> str:

@@ -6,11 +6,9 @@ import umsgpack
 
 import pytest
 
-# pylint: disable=bad-continuation
-from liaa.protocol import Header
 from liaa.network import Server
 from liaa.node import Node, PeerNode, ResourceNode
-from liaa.protocol import KademliaProtocol
+from liaa.protocol import KademliaProtocol, Header
 from liaa.routing import RoutingTable, KBucket
 from liaa.storage import StorageIface
 from liaa.utils import rand_str
@@ -76,6 +74,19 @@ def fake_proto(mkpeer):
 		node = node or mkpeer()
 		return FakeProtocol(node, StorageIface(node), ksize=20)
 	return _fake_proto
+
+
+@pytest.fixture()
+def mkdgram():
+	def _mkdgram(header=None, mid=None, args=None):
+		"""
+		Create a fake datagram
+		"""
+		header = header or Header.Request
+		mid = mid or rand_str(20).encode()
+		args = msgpack.packb(args) if args else umsgpack.packb(('foo', '12345'))
+		return header + mid + args
+	return _mkdgram
 
 
 # pylint: disable=too-few-public-methods
