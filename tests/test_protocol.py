@@ -12,7 +12,10 @@ from liaa.protocol import (
 	HttpInterface,
 	Header
 )
-from liaa.storage import EphemeralStorage, StorageIface
+from liaa.routing import RoutingTable
+from liaa.node import Node
+from liaa.storage import EphemeralStorage, StorageIface, IStorage
+from liaa.utils import rand_str
 
 
 class TestRPCDatagramProtocol:
@@ -33,7 +36,7 @@ class TestRPCDatagramProtocol:
 
 		box = sandbox(proto)
 
-		def accept_request_stub(dgram):
+		def accept_request_stub(dgram, address):
 			idf, data = dgram[1:21], umsgpack.unpackb(dgram[21:])
 			funcname, args = data
 			funcname = 'rpc_' + funcname
@@ -41,7 +44,7 @@ class TestRPCDatagramProtocol:
 		
 		box.stub('_accept_request', accept_request_stub)
 
-		header, funcname, data = proto._accept_request(mkdgram())
+		header, funcname, data = proto._accept_request(mkdgram(), ('127.0.0.1', 8000))
 		assert funcname == 'rpc_foo'
 		assert header == Header.Request
 		assert data == '12345'
@@ -131,30 +134,35 @@ class TestHttpInterface:
 		assert response.startswith('HTTP/1.1 OK 200')
 		assert '"details": "found"' in response
 
+
 class TestKademliaProtocol:
 	# pylint: disable=no-self-use
 	def test_can_init_protocol(self, mkpeer):
 		node = mkpeer()
 		proto = KademliaProtocol(node, storage=EphemeralStorage(node), ksize=20)
 		assert isinstance(proto, KademliaProtocol)
+		assert isinstance(proto.storage, IStorage)
 
-	def test_can_refresh_ids(self, mkresource, mkbucket, fake_proto):
-		proto = fake_proto()
-		for _ in range(5):
-			bucket = mkbucket(ksize=proto.router.ksize)
-			for _ in range(5):
-				node = mkresource()
-				bucket.add_node(node)
-			proto.router.add_bucket(bucket)
+	def test_can_get_refresh_ids(self, fake_proto, mknode):
+		ksize = 3
+		proto = fake_proto(ksize=ksize)
+		proto.router = RoutingTable(proto, ksize, proto.source_node, maxlong=10)
+		for x in range(4):
+			node = mknode()
+			node.long_id = x
+			proto.router.add_contact(node)
+
+		assert len(proto.router.buckets) == 3
 
 		# randomly pick some buckets to make stale
-		sample = random.sample(proto.router.buckets, 3)
+		sample = random.sample(proto.router.buckets, 2)
 		for bucket in sample:
 			bucket.last_updated = time.monotonic() - 3600
 
 		to_refresh = proto.get_refresh_ids()
 		assert isinstance(to_refresh, list)
-		assert len(to_refresh) == 3
+		assert len(to_refresh) > 0
+		assert all([isinstance(n, Node) for n in to_refresh])
 
 	def test_rpc_stun_returns_node(self, mkpeer, fake_proto):
 		proto = fake_proto()
@@ -181,3 +189,14 @@ class TestKademliaProtocol:
 		assert source_id == sender.key
 
 		box.restore()
+
+	def test_rpc_stores(self, mkpeer, fake_proto):
+		sender = mkpeer()
+		proto = fake_proto()
+
+		success = proto.rpc_store(sender, sender.key, 'foo', b'bar')
+		assert success
+
+		# make sure
+		result = proto.storage.get('foo')
+		assert str(result) == 'resource@foo'

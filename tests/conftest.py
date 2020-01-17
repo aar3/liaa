@@ -6,6 +6,7 @@ import umsgpack
 
 import pytest
 
+from liaa import MAX_LONG
 from liaa.network import Server
 from liaa.node import Node, PeerNode, ResourceNode
 from liaa.protocol import KademliaProtocol, Header
@@ -50,7 +51,7 @@ def mkresource():
 
 @pytest.fixture()
 def mkbucket():
-	def _mkbucket(ksize, low=0, high=2**160):
+	def _mkbucket(ksize, low=0, high=MAX_LONG):
 		"""
 		Create a fake KBucket
 		"""
@@ -67,12 +68,13 @@ class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
 
 @pytest.fixture()
 def fake_proto(mkpeer):
-	def _fake_proto(node=None):
+	def _fake_proto(node=None, ksize=None):
 		"""
 		Create a fake protocol
 		"""
 		node = node or mkpeer()
-		return FakeProtocol(node, StorageIface(node), ksize=20)
+		ksize = ksize or 20
+		return FakeProtocol(node, StorageIface(node), ksize=ksize)
 	return _fake_proto
 
 
@@ -84,7 +86,7 @@ def mkdgram():
 		"""
 		header = header or Header.Request
 		mid = mid or rand_str(20).encode()
-		args = msgpack.packb(args) if args else umsgpack.packb(('foo', '12345'))
+		args = umsgpack.packb(args) if args else umsgpack.packb(('foo', '12345'))
 		return header + mid + args
 	return _mkdgram
 

@@ -87,8 +87,7 @@ class RPCFindResponse:
 				List of nodes returned from find response
 		"""
 		nodelist: List[List[str, str, Any]] = self.response[1] or []
-		# where List[str, str, int] resembles ['0.0.0.0:8005', '0.0.0.0', 8005]
-		return [Node(key=node[0], node_type='any') for node in nodelist]
+		return [Node(key=node[0]) for node in nodelist]
 
 
 class RPCDatagramProtocol(asyncio.DatagramProtocol):
@@ -443,17 +442,17 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 	def get_refresh_ids(self):
 		"""
-		Get list of node ids with which to search, in order to keep old
-		buckets up to date.
+		Get random node ids for buckets that haven't been updated in an hour
 
 		Returns
 		-------
 			ids: List[int]
-				ids of buckets that have not been updated since 3600
+				Key ids of buckets that have not been updated since 3600
 		"""
 		ids = []
 		for bucket in self.router.lonely_buckets():
-			rid = random.randint(*bucket.range).to_bytes(20, byteorder='big')
+			# rid = random.randint(*bucket.range)
+			rid = random.choice(bucket.get_nodes())
 			ids.append(rid)
 		return ids
 
@@ -516,7 +515,9 @@ class KademliaProtocol(RPCDatagramProtocol):
 			bool:
 				Indicator of successful operation
 		"""
-		source = PeerNode(join_addr((sender[0], sender[1])))
+		# pylint: disable=fixme
+		# TODO: this might raise a bug if is not guaranteed to be peer
+		source = PeerNode(join_addr((sender.ip, sender.port)))
 		self.welcome_if_new(source)
 		# pylint: disable=bad-continuation
 		log.debug("%s got store request from %s, storing %iB at %s",
@@ -547,7 +548,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		source = PeerNode(node_id)
 		log.info("%s finding neighbors of %s in local table", self.source_node, source)
 		self.welcome_if_new(source)
-		node = Node(key, node_type='any', value=None)
+		node = Node(key, value=None)
 		neighbors = self.router.find_neighbors(node, exclude=source)
 		return list(map(tuple, neighbors))
 
