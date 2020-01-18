@@ -111,7 +111,7 @@ class ValueSpiderCrawl(SpiderCrawl):
 		"""
 		The C{ValueCrawl}er is basically responsible for executing recursive calls
 		to our _find method, which searches our nearest nodes (and the nearest nodes
-		to those nodes, so on and so forth) in an attempt to find a given 160-bit
+		to those nodes, so on and so forth) in an attempt to find a given 200-bit
 		resource key. This crawler will either return a callback to _handle_found_values
 		if values for the given key are found, or the crawler will return None
 		if the given key cannot be found via our current node

@@ -5,12 +5,14 @@ import asyncio
 
 from itertools import chain
 from collections import OrderedDict
+
+from liaa import MAX_LONG
 from liaa.utils import shared_prefix, bytes_to_bit_string
 
 
 class KBucket:
-	def __init__(self, range_lower, range_upper, ksize):
-		self.range = (range_lower, range_upper)
+	def __init__(self, rangeLower, rangeUpper, ksize):
+		self.range = (rangeLower, rangeUpper)
 		self.nodes = OrderedDict()
 		self.replacement_nodes = OrderedDict()
 		self.touch_last_updated()
@@ -29,11 +31,11 @@ class KBucket:
 		midpoint = (self.range[0] + self.range[1]) / 2
 		one = KBucket(self.range[0], midpoint, self.ksize)
 		two = KBucket(midpoint + 1, self.range[1], self.ksize)
-		nodes = chain(self.nodes.values(), self.replacement_nodes.values())
+		nodes = chain(self.get_nodes(), self.get_replacement_nodes())
+
 		for node in nodes:
 			bucket = one if node.long_id <= midpoint else two
 			bucket.add_node(node)
-
 		return (one, two)
 
 	def remove_node(self, node):
@@ -57,21 +59,25 @@ class KBucket:
 		"""
 		Add a C{Node} to the C{KBucket}.  Return True if successful,
 		False if the bucket is full.
-
 		If the bucket is full, keep track of node in a replacement list,
 		per section 4.1 of the paper.
 		"""
 		if node.key in self.nodes:
 			del self.nodes[node.key]
 			self.nodes[node.key] = node
-		elif len(self) < self.ksize:
+			return True
+
+		if len(self) < self.ksize:
 			self.nodes[node.key] = node
-		else:
-			if node.key in self.replacement_nodes:
-				del self.replacement_nodes[node.key]
+			return True
+
+		if node.key in self.replacement_nodes:
+			del self.replacement_nodes[node.key]
 			self.replacement_nodes[node.key] = node
 			return False
-		return True
+
+		self.replacement_nodes[node.key] = node
+		return False
 
 	def depth(self):
 		vals = self.nodes.values()
@@ -87,10 +93,13 @@ class KBucket:
 	def __len__(self):
 		return len(self.nodes)
 
+	def all_node_count(self):
+		return len(self.get_nodes()) + len(self.get_replacement_nodes())
+
 
 class TableTraverser:
-	def __init__(self, table, start_node):
-		index = table.get_bucket_index_for(start_node)
+	def __init__(self, table, startNode):
+		index = table.get_bucket_index_for(startNode)
 		table.buckets[index].touch_last_updated()
 		self.current_nodes = table.buckets[index].get_nodes()
 		self.left_buckets = table.buckets[:index]
@@ -121,7 +130,7 @@ class TableTraverser:
 
 
 class RoutingTable:
-	def __init__(self, protocol, ksize, node):
+	def __init__(self, protocol, ksize, node, maxlong=None):
 		"""
 		@param node: The node that represents this server.  It won't
 		be added to the routing table, but will be needed later to
@@ -130,10 +139,11 @@ class RoutingTable:
 		self.node = node
 		self.protocol = protocol
 		self.ksize = ksize
+		self.maxlong = maxlong or MAX_LONG
 		self.flush()
 
 	def flush(self):
-		self.buckets = [KBucket(0, 2 ** 160, self.ksize)]
+		self.buckets = [KBucket(0, self.maxlong, self.ksize)]
 
 	def split_bucket(self, index):
 		one, two = self.buckets[index].split()
@@ -146,7 +156,7 @@ class RoutingTable:
 		an hour.
 		"""
 		hrago = time.monotonic() - 3600
-		return [b for b in self.buckets if b.last_updated < hrago]
+		return [b for b in self.buckets if b.last_updated < hrago and len(b) > 0]
 
 	def remove_contact(self, node):
 		index = self.get_bucket_index_for(node)
@@ -155,9 +165,6 @@ class RoutingTable:
 	def is_new_node(self, node):
 		index = self.get_bucket_index_for(node)
 		return self.buckets[index].is_new_node(node)
-
-	def add_bucket(self, bucket):
-		self.buckets.append(bucket)
 
 	def add_contact(self, node):
 		index = self.get_bucket_index_for(node)
@@ -169,7 +176,7 @@ class RoutingTable:
 
 		# Per section 4.2 of paper, split if the bucket has the node
 		# in its range or if the depth is not congruent to 0 mod 5
-		if bucket.has_in_range(self.node) or bucket.depth() % 5:
+		if bucket.has_in_range(node) or bucket.depth() % 5 != 0:
 			self.split_bucket(index)
 			self.add_contact(node)
 		else:
@@ -179,23 +186,17 @@ class RoutingTable:
 		"""
 		Get the index of the bucket that the given node would fall into.
 		"""
-		index = None
-		for i, bucket in enumerate(self.buckets):
+		for index, bucket in enumerate(self.buckets):
 			if node.long_id < bucket.range[1]:
-				index = i
-				break
+				return index
 		# we should never be here, but make linter happy
-		return index
-
-	def get_bucket_for(self, node):
-		idx = self.get_bucket_index_for(node)
-		return self.buckets[idx]
+		return None
 
 	def find_neighbors(self, node, k=None, exclude=None):
 		k = k or self.ksize
 		nodes = []
 		for neighbor in TableTraverser(self, node):
-			notexcluded = exclude is None or not neighbor.is_same_node(exclude)
+			notexcluded = exclude is None or not neighbor.same_home_as(exclude)
 			if neighbor.key != node.key and notexcluded:
 				heapq.heappush(nodes, (node.distance_to(neighbor), neighbor))
 			if len(nodes) == k:

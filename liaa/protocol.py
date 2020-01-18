@@ -87,8 +87,7 @@ class RPCFindResponse:
 				List of nodes returned from find response
 		"""
 		nodelist: List[List[str, str, Any]] = self.response[1] or []
-		# where List[str, str, int] resembles ['0.0.0.0:8005', '0.0.0.0', 8005]
-		return [Node(key=node[0], node_type='any') for node in nodelist]
+		return [Node(key=node[0]) for node in nodelist]
 
 
 class RPCDatagramProtocol(asyncio.DatagramProtocol):
@@ -108,7 +107,6 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
 		self.source_node = source_node
 		self._wait = wait
-		self._outstanding_msgs: Dict[int, Tuple[asyncio.Future, asyncio.Handle]] = {}
 		self._queue = {}
 		self.transport = None
 
@@ -177,19 +175,14 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
 		idf, data = buff[1:21], umsgpack.unpackb(buff[21:])
 		msgargs = (base64.b64encode(idf), address)
-		if idf not in self._outstanding_msgs:
-			# pylint: disable=bad-continuation
-			log.warning("%s received unknown message %s from %s; ignoring", str(self.source_node),
-						*msgargs)
+
+		if not idf in self._queue:
+			log.warning("%s could not mark datagram %s as received", str(self.source_node), idf)
 			return
 
 		# pylint: disable=bad-continuation
 		log.debug("%s %iB response for message id %s from %s", str(self.source_node),
 				sys.getsizeof(data), idf, join_addr(msgargs[1]))
-
-		if not idf in self._queue:
-			log.warning("could not mark datagram %s as received", idf)
-			return
 
 		fut, timeout = self._queue[idf]
 		fut.set_result((True, data))
@@ -231,19 +224,19 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			base64.b64encode(idf), join_addr(address))
 		self.transport.sendto(txdata, address)
 
-	def _timeout(self, msg_id: int) -> None:
+	def _timeout(self, msg_id: bytes) -> None:
 		"""
 		Make a given datagram timeout
 
 		Parameters
 		----------
-			msg_id: int
+			msg_id: bytes
 				ID of datagram future to cancel
 		"""
 		args = (base64.b64encode(msg_id), self._wait)
 		log.error("Did not received reply for msg id %s within %i seconds", *args)
-		self._outstanding_msgs[msg_id][0].set_result((False, None))
-		del self._outstanding_msgs[msg_id]
+		self._queue[msg_id][0].set_result((False, None))
+		del self._queue[msg_id]
 
 	def __getattr__(self, name: str) -> Union[asyncio.Future, asyncio.Future, None]:
 
@@ -278,7 +271,6 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			future = loop.create_future()
 			timeout = loop.call_later(self._wait, self._timeout, msg_id)
 			self._queue[msg_id] = (future, timeout)
-			self._outstanding_msgs[msg_id] = (future, timeout)
 			return future
 
 		return func
@@ -370,7 +362,7 @@ class HttpInterface(asyncio.Protocol):
 		"""
 		node = ResourceNode(key, payload)
 		self.storage.set(node)
-		return self.pack_response(160, "OK", json.dumps({"details": "ok"}))
+		return self.pack_response(200, "OK", json.dumps({"details": "ok"}))
 
 	def fetch_data(self, key: Optional[str]) -> str:
 		"""
@@ -389,10 +381,10 @@ class HttpInterface(asyncio.Protocol):
 		node = self.storage.get(key)
 		# pylint: disable=bad-continuation
 		if node:
-			return self.pack_response(160, "OK",
+			return self.pack_response(200, "OK",
 					json.dumps({"details": "found", "data": str(node)}))
 		return self.pack_response(404, "NOT FOUND",
-				json.dumps({"details": "Not found", "data": str(node)}))
+				json.dumps({"details": "not found"}))
 
 	# pylint: disable=no-self-use
 	def pack_response(self, code: int, msg: str, body: Dict[str, str]) -> str:
@@ -450,17 +442,17 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 	def get_refresh_ids(self):
 		"""
-		Get list of node ids with which to search, in order to keep old
-		buckets up to date.
+		Get random node ids for buckets that haven't been updated in an hour
 
 		Returns
 		-------
 			ids: List[int]
-				ids of buckets that have not been updated since 3600
+				Key ids of buckets that have not been updated since 3600
 		"""
 		ids = []
 		for bucket in self.router.lonely_buckets():
-			rid = random.randint(*bucket.range).to_bytes(20, byteorder='big')
+			# rid = random.randint(*bucket.range)
+			rid = random.choice(bucket.get_nodes())
 			ids.append(rid)
 		return ids
 
@@ -523,7 +515,9 @@ class KademliaProtocol(RPCDatagramProtocol):
 			bool:
 				Indicator of successful operation
 		"""
-		source = PeerNode(join_addr((sender[0], sender[1])))
+		# pylint: disable=fixme
+		# TODO: this might raise a bug if is not guaranteed to be peer
+		source = PeerNode(join_addr((sender.ip, sender.port)))
 		self.welcome_if_new(source)
 		# pylint: disable=bad-continuation
 		log.debug("%s got store request from %s, storing %iB at %s",
@@ -554,7 +548,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		source = PeerNode(node_id)
 		log.info("%s finding neighbors of %s in local table", self.source_node, source)
 		self.welcome_if_new(source)
-		node = Node(key, node_type='any', value=None)
+		node = Node(key, value=None)
 		neighbors = self.router.find_neighbors(node, exclude=source)
 		return list(map(tuple, neighbors))
 

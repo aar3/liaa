@@ -8,7 +8,7 @@ setup(
 		version=liaa.__version__,
 		# pylint: disable=line-too-long
 		description="Liaa is a distributed hash table for decentralized peer-to-peer computer networks.",
-		long_description=open("README.md", encoding='utf-8').read(),
+		long_description=open("./docs/README.md", encoding='utf-8').read(),
 		long_description_content_node_type='text/markdown',
 		author="Brian Muller, Rashad Alston",
 		author_email="bamuller@gmail.com, rashadalston@gmail.com",
