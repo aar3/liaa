@@ -3,6 +3,7 @@ import random
 
 import pytest
 
+from liaa import MAX_LONG
 from liaa.routing import KBucket, TableTraverser, RoutingTable
 from liaa.network import KademliaProtocol
 from liaa.utils import rand_str, join_addr
@@ -100,12 +101,17 @@ class TestKBucket:
 			assert node == nodes[index]
 
 	def test_bucket_has_in_range(self, mkpeer, mkresource):
-		bucket = KBucket(0, 2**160, 10)
+		bucket = KBucket(0, MAX_LONG, 10)
 		assert bucket.has_in_range(mkpeer()) is True
 		assert bucket.has_in_range(mkpeer()) is True
 		assert bucket.has_in_range(mkresource(key=rand_str(10))) is True
 		assert bucket.has_in_range(mkresource(key=rand_str(16))) is True
-		assert bucket.has_in_range(mkresource(key=rand_str(20))) is False
+		assert bucket.has_in_range(mkresource(key=rand_str(19))) is True
+		
+		try:
+			bucket.has_in_range(mkresource(key=rand_str(21))) is False
+		except OverflowError as err:
+			assert str(err).endswith('cannot exceed ' + str(MAX_LONG))
 
 
 class TestRoutingTable:
@@ -125,10 +131,11 @@ class TestRoutingTable:
 		table.split_bucket(0)
 		assert len(table.buckets) == 4
 
-	def test_lonely_buckets_returns_stale_buckets(self, mkpeer, mkbucket):
+	def test_lonely_buckets_returns_stale_buckets(self, mkpeer, mkbucket, mknode):
 		ksize = 3
 		table = RoutingTable(KademliaProtocol, ksize, node=mkpeer())
 		table.buckets.append(mkbucket(ksize))
+		table.buckets[0].add_node(mknode())
 		table.buckets.append(mkbucket(ksize))
 
 		# make bucket lonely
@@ -179,7 +186,7 @@ class TestTableTraverser:
 
 		buckets = []
 		for i in range(5):
-			bucket = KBucket(0, 2**160, 2)
+			bucket = KBucket(0, MAX_LONG, 2)
 			bucket.add_node(nodes[2 * i])
 			bucket.add_node(nodes[2 * i + 1])
 			buckets.append(bucket)

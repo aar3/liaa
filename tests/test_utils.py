@@ -1,5 +1,6 @@
 import asyncio
 
+from liaa import MAX_KEYSIZE, MAX_LONG, BASE_INT
 # pylint: disable=bad-continuation
 from liaa.utils import (
 	shared_prefix,
@@ -9,11 +10,12 @@ from liaa.utils import (
 	check_dht_value_type,
 	gather_dict,
 	join_addr,
-	hex_to_int_digest,
 	split_addr,
 	digest_to_int,
 	rand_str,
+	pack,
 	rand_int_id,
+	long_to_key,
 	int_to_digest
 )
 
@@ -39,7 +41,7 @@ class TestUtils:
 		bstr = [bin(bite)[2:].rjust(8, '0') for bite in arr]
 		assert "".join(bstr) == bytes_to_bit_string(arr)
 
-	def test_to_base16_int(self):
+	def test_to_base20_int(self):
 		num = 5
 		num_as_bytes = bytes([num])
 		assert hex_to_int(num_as_bytes.hex()) == num
@@ -97,31 +99,28 @@ class TestUtils:
 	def test_rand_str(self):
 		result = rand_str()
 		assert isinstance(result, str)
-		assert len(result) == 16
+		assert len(result) == MAX_KEYSIZE
 
 	def test_rand_int_id(self):
 		result = rand_int_id()
 		assert isinstance(result, int)
-		assert 0 < result < 2**160
+		assert 0 < result < MAX_LONG
 
 	def test_digest_to_int(self):
 		num = 10
-		byte_arr = num.to_bytes(16, byteorder='big')
+		byte_arr = num.to_bytes(20, byteorder='big')
 		assert digest_to_int(byte_arr) == num
 
 	def test_int_to_digest(self):
 		num = 10
-		byte_arr = num.to_bytes((num.bit_length() // 8) + 1, byteorder='big')
+		byte_arr = num.to_bytes(BASE_INT, byteorder='big')
 		assert byte_arr == int_to_digest(num)
 
-	def digest_to_int(self):
-		dgst = b'\x00\x00\x00\n'
-		assert dgst == digest_to_int(10)
-
-	def test_hex_to_int_digest(self):
-		num = 10
-		hexval = int_to_digest(num).hex()
-		assert hex_to_int_digest(hexval) == int_to_digest(num)
+	def test_long_to_key(self):
+		key = rand_str(16)
+		long = int(pack(key).hex(), BASE_INT)
+		_, inverse = long_to_key(long)
+		assert inverse.decode() == key
 
 class TestArgsParser:
 

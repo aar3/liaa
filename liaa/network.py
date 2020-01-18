@@ -144,7 +144,7 @@ class Server:
 		"""
 		results: List[asyncio.Future] = []
 		for key in self.protocol.get_refresh_ids():
-			node = Node(key=key, node_type='any')
+			node = Node(key=key)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
 			log.debug("%s refreshing routing table on %i nearest", self.node, len(nearest))
 			spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)

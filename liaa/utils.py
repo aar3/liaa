@@ -8,6 +8,8 @@ import ssl
 import asyncio
 from typing import Dict, Any, List, Union, Tuple, Optional
 
+from liaa import BASE_INT, MAX_KEYSIZE, MAX_LONG, BYTE_ORDER
+
 
 def join_addr(addr: Tuple[str, int]) -> str:
 	"""
@@ -44,7 +46,7 @@ def split_addr(addr: "str") -> Tuple[str, int]:
 	return host, int(port)
 
 
-def rand_str(num=16) -> str:
+def rand_str(num: int = MAX_KEYSIZE) -> str:
 	"""
 	Create a random string array
 	"""
@@ -59,9 +61,9 @@ def rand_int_id() -> str:
 	Returns
 	-------
 		int:
-			160-bit integer
+			MAX_BITSIZE-bit integer
 	"""
-	return random.randint(1, 2**160)
+	return random.randint(1, MAX_LONG)
 
 def rand_digest_id():
 	num = rand_int_id()
@@ -97,7 +99,7 @@ def digest_to_int(byte_arr: bytes) -> int:
 
 
 def int_to_digest(num: int) -> bytes:
-	return num.to_bytes((num.bit_length() // 8) + 1, byteorder='big')
+	return num.to_bytes(BASE_INT, byteorder='big')
 
 
 def shared_prefix(args: List[str]) -> str:
@@ -139,22 +141,18 @@ def bytes_to_bit_string(arr: bytes) -> str:
 	return "".join(bits)
 
 
-def hex_to_int_digest(hexval: str) -> bytes:
-	return int_to_digest(hex_to_int(hexval))
-
-
-def hex_to_int(hexval: bytes, base: int = 16) -> int:
+def hex_to_int(hexstr: str) -> int:
 	"""
-	Convert given hex to a base-16 integer
+	Convert given hex to a base-BASE_INT integer
 
 	Parameters
 	----------
-		hexval: bytes
+		hexstr: bytes
 			Hex byte array
 		base: int
-			Base of integer conversion (default=16)
+			Base of integer conversion (default=20)
 	"""
-	return int(hexval, base)
+	return int(hexstr, BASE_INT)
 
 
 def check_dht_value_type(value: Any) -> bool:
@@ -267,14 +265,54 @@ def str_arg_to_bool(arg: str) -> Union[bool, str]:
 	return False if arg.lower() == 'false' else arg
 
 
-def pack(fmt: str, arr: str) -> bytes:
+def pack(arr: str, fmt: str = BYTE_ORDER) -> bytes:
+	"""
+	Pack a string into a byte array
+
+	Parameters
+	----------
+		arr: str
+			String array to pack
+		fmt: str
+			Pack style (default big Indian)
+	"""
 	arr = arr.encode()
 	return struct.pack(fmt, len(arr)) + arr
 
 
-def unpack(fmt: str, arr: bytes) -> Tuple[int, bytes]:
+def unpack(arr: bytes, fmt: str = BYTE_ORDER) -> Tuple[int, bytes]:
+	"""
+	Unpack a byte array according to a given format
+
+	Parameters
+	----------
+		fmt: str
+			Byte-order style (default big Indian)
+	"""
 	size = struct.calcsize(fmt)
 	return struct.unpack(fmt, arr[:size]), arr[size:]
+
+
+def digit_to_char(digit: int):
+	if digit < 10:
+		return str(digit)
+	return chr(ord('a') + digit - 10)
+
+
+def reverse_hex(number: int, base: int = BASE_INT) -> str:
+	def _reverse_hex(number: int, base: int):
+		if number < 0:
+			return '-' + _reverse_hex(-number, base)
+		# pylint: disable=invalid-name
+		(d, m) = divmod(number, base)
+		if d > 0:
+			return _reverse_hex(d, base) + digit_to_char(m)
+		return digit_to_char(m)
+	return  _reverse_hex(number, base)
+
+
+def long_to_key(number: int) -> str:
+	return unpack(bytes.fromhex(reverse_hex(number)))
 
 
 def debug_ssl_ctx(dirname: str) -> ssl.SSLContext:

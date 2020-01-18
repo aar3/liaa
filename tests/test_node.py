@@ -1,3 +1,4 @@
+from liaa import MAX_LONG
 from liaa.node import Node, NodeHeap, PeerNode, ResourceNode
 from liaa.utils import hex_to_int, pack
 
@@ -11,16 +12,16 @@ class TestNode:
 		assert node.port == 8080
 		assert node.node_type == 'peer'
 		assert not node.value
-		assert node.digest == pack("I", node.key)
-		assert node.long_id < 2**160
+		assert node.digest == pack(node.key)
+		assert node.long_id < MAX_LONG
 		assert str(node) == "peer@127.0.0.1:8080"
 
 	def test_resource_node(self):
 		node = ResourceNode(key='my-node', value=b'123')
 		assert isinstance(node, ResourceNode)
 		assert node.node_type == 'resource'
-		assert node.digest == pack("I", node.key)
-		assert node.long_id < 2**160
+		assert node.digest == pack(node.key)
+		assert node.long_id < MAX_LONG
 		assert str(node) == 'resource@my-node'
 
 	def test_distance_calculation(self, mkpeer):
@@ -31,7 +32,7 @@ class TestNode:
 		none = mkpeer(key=addr1)
 		ntwo = mkpeer(key=addr2)
 
-		shouldbe = hex_to_int(pack("I", addr1).hex()) ^ hex_to_int(pack("I", addr2).hex())
+		shouldbe = hex_to_int(pack(addr1).hex()) ^ hex_to_int(pack(addr2).hex())
 
 		assert none.distance_to(ntwo) == shouldbe
 

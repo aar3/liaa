@@ -3,6 +3,7 @@ import heapq
 import logging
 from typing import Optional, List
 
+from liaa import MAX_LONG
 from liaa.utils import hex_to_int, check_dht_value_type, split_addr, pack
 
 
@@ -11,7 +12,7 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # pylint: disable=too-many-instance-attributes
 class Node:
-	def __init__(self, key: str, node_type: str, value: Optional[bytes] = None):
+	def __init__(self, key: str, value: Optional[bytes] = None):
 		"""
 		Node
 
@@ -25,20 +26,16 @@ class Node:
 		Parameters
 		----------
 			digest_id: bytes
-				A value between 0 and 2^160 (as byte array)
+				A value between 0 and 2^200 (as byte array)
 			key: str
 				String identifier or this node
 					is `IP:PORT` if node_type == 'peer'
-			node_type: int
-				Indicator of whether the node represents a peer or a resource in
-				the network
-					- peer, resource, any
 			value: Optional[bytes]
 				Payload associated with node (if self.node_type == 'resource')
 		"""
-		self.node_type = node_type
 		self.value = value
 		self.key = key
+		self.node_type = None
 		# pylint: disable=invalid-name
 		self.ip = None
 		self.port = None
@@ -48,9 +45,11 @@ class Node:
 		except ValueError:
 			pass
 
-		self.digest = pack("I", self.key)
+		self.digest = pack(self.key)
 		self.hex = self.digest.hex()
 		self.long_id = hex_to_int(self.digest.hex())
+		if self.long_id > MAX_LONG:
+			raise OverflowError('node.long_id cannot exceed ' + str(MAX_LONG))
 
 	def has_valid_value(self) -> bool:
 		return check_dht_value_type(self.value)
@@ -87,12 +86,14 @@ class Node:
 
 class PeerNode(Node):
 	def __init__(self, key):
-		super(PeerNode, self).__init__(key, node_type="peer", value=None)
+		super(PeerNode, self).__init__(key, value=None)
+		self.node_type = 'peer'
 
 
 class ResourceNode(Node):
 	def __init__(self, key, value=None):
-		super(ResourceNode, self).__init__(key, node_type="resource", value=value)
+		super(ResourceNode, self).__init__(key, value=value)
+		self.node_type = 'resource'
 
 
 class NodeHeap:
@@ -150,10 +151,10 @@ class NodeHeap:
 		return len(self.get_uncontacted()) == 0
 
 	def get_ids(self):
-		return [n.digest for n in self]
+		return [n.key for n in self]
 
 	def mark_contacted(self, node):
-		self.contacted.add(node.digest)
+		self.contacted.add(node.key)
 
 	def popleft(self):
 		return heapq.heappop(self.heap)[1] if self else None
@@ -181,9 +182,9 @@ class NodeHeap:
 
 	def __contains__(self, node):
 		for _, other in self.heap:
-			if node.digest == other.digest:
+			if node.key == other.key:
 				return True
 		return False
 
 	def get_uncontacted(self):
-		return [n for n in self if n.digest not in self.contacted]
+		return [n for n in self if n.key not in self.contacted]
