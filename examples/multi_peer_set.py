@@ -18,6 +18,8 @@
 # 	In terminal tab #3
 # 		- python examples/multi_peer_set.py -p 8002 -n 127.0.0.1:8001
 
+import env
+
 import logging
 import asyncio
 import time
@@ -25,8 +27,15 @@ import sys
 import getopt
 
 from liaa.network import Server
-from liaa.node import Node, NodeType
-from liaa.utils import rand_str, split_addr, ArgsParser, rand_digest_id, str_arg_to_bool
+from liaa.node import ResourceNode, PeerNode
+# pylint: disable=bad-continuation
+from liaa.utils import (
+	rand_str, 
+	split_addr, 
+	ArgsParser, 
+	str_arg_to_bool, 
+	debug_ssl_ctx
+)
 
 
 def usage():
@@ -41,8 +50,8 @@ Usage: python multi_peer_set.py -p [port] -n [bootstrap neighbors]
 
 async def make_fake_data(server):
 	while True:
-		resource = Node(rand_digest_id(), node_type=NodeType.Resource, value=rand_str())
-		await server.set(resource)
+		node = ResourceNode(key=rand_str(), value=rand_str().encode())
+		await server.set(node)
 		await asyncio.sleep(5)
 
 
@@ -57,7 +66,8 @@ def main():
 
 	loop = asyncio.get_event_loop()
 
-	server = Server()
+	server = Server("0.0.0.0", int(parser.get("-p", "--port")))
+	server.ssl_ctx = debug_ssl_ctx(server.storage.root_dir)
 
 	parser = ArgsParser()
 
@@ -75,7 +85,7 @@ def main():
 		print(usage())
 		sys.exit(1)
 
-	loop.run_until_complete(server.listen(int(parser.get("-p", "--port"))))
+	loop.run_until_complete(server.listen())
 
 	bootstrap_peers = str_arg_to_bool(parser.get("-n", "--neighbors"))
 	if bootstrap_peers:

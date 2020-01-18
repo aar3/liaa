@@ -25,7 +25,7 @@
    - [enhancement] add Docker support
    - [chore] rename project to `liaa` to avoid pypi namespace collisions
    - [bugfix] ensure crawler working properly (ISSUE-28)
-      - remove sphinx docs and add new docs
+      - remove kademlia/ sphinx docs
       - update CI to push on version branches and master
       - base node IDs off of ip:port, and search keys and adjust tests
-   
+   - [enhancement] add self-signed tls to http iface

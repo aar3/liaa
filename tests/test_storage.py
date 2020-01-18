@@ -2,7 +2,6 @@ import os
 import time
 
 from liaa.storage import EphemeralStorage, DiskStorage
-from liaa.node import Node, NodeType
 
 
 class TestEphemeralStorage:
