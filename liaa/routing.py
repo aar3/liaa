@@ -196,10 +196,16 @@ class RoutingTable:
 		k = k or self.ksize
 		nodes = []
 		for neighbor in TableTraverser(self, node):
-			notexcluded = exclude is None or not neighbor.same_home_as(exclude)
+			notexcluded = exclude is None or not neighbor.is_same_node(exclude)
 			if neighbor.key != node.key and notexcluded:
 				heapq.heappush(nodes, (node.distance_to(neighbor), neighbor))
 			if len(nodes) == k:
 				break
 
 		return list(map(operator.itemgetter(1), heapq.nsmallest(k, nodes)))
+
+	def num_nodes(self) -> int:
+		return sum([b.all_node_count() for b in self.buckets])
+
+	def __len__(self) -> int:
+		return len(self.buckets)

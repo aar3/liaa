@@ -18,8 +18,8 @@
 # 	In terminal tab #3
 # 		- python examples/multi_peer_set.py -p 8002 -n 127.0.0.1:8001
 
+# pylint: disable=wrong-import-order,unused-import
 import env
-
 import logging
 import asyncio
 import time
@@ -30,10 +30,10 @@ from liaa.network import Server
 from liaa.node import ResourceNode, PeerNode
 # pylint: disable=bad-continuation
 from liaa.utils import (
-	rand_str, 
-	split_addr, 
-	ArgsParser, 
-	str_arg_to_bool, 
+	rand_str,
+	split_addr,
+	ArgsParser,
+	str_arg_to_bool,
 	debug_ssl_ctx
 )
 
@@ -66,9 +66,6 @@ def main():
 
 	loop = asyncio.get_event_loop()
 
-	server = Server("0.0.0.0", int(parser.get("-p", "--port")))
-	server.ssl_ctx = debug_ssl_ctx(server.storage.root_dir)
-
 	parser = ArgsParser()
 
 	try:
@@ -84,6 +81,9 @@ def main():
 	if parser.has_help_opt() or not parser.has_proper_opts():
 		print(usage())
 		sys.exit(1)
+
+	server = Server("0.0.0.0", int(parser.get("-p", "--port")))
+	server.ssl_ctx = debug_ssl_ctx(server.storage.root_dir)
 
 	loop.run_until_complete(server.listen())
 

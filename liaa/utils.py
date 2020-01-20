@@ -315,20 +315,18 @@ def long_to_key(number: int) -> str:
 	return unpack(bytes.fromhex(reverse_hex(number)))
 
 
-def debug_ssl_ctx(dirname: str) -> ssl.SSLContext:
+def debug_ssl_ctx(dirname: str) -> Optional[ssl.SSLContext]:
 	"""
 	Create and return an SSL context used for examples/tests/debugging
 
 	Returns
 	-------
-		ssl.SSLContext
+		Optional[ssl.SSLContext]
 	"""
 	certfile = os.path.join(dirname, "pub.cert")
 	keyfile = os.path.join(dirname, "priv.key")
 	if not os.path.exists(certfile) or not os.path.exists(keyfile):
-		msg = f"priv.key and pub.cert expected in {dirname}. " \
-			"Try running bin/tls to create these files"
-		raise RuntimeError(msg)
+		return None
 	ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
 	ssl_ctx.load_cert_chain(certfile, keyfile)
 	return ssl_ctx

@@ -15,8 +15,8 @@
 # -------
 # python examples/multi_peer_simulator.py
 
+# pylint: disable=wrong-import-order,unused-import
 import env
-
 import os
 import sys
 import logging
