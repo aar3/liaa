@@ -10,16 +10,103 @@ from liaa import MAX_LONG
 from liaa.utils import shared_prefix, bytes_to_bit_string
 
 
+class ListNode:
+	# pylint: disable=redefined-builtin,too-few-public-methods
+	def __init__(self, val, prev=None, next=None):
+		self.val = val
+		self.prev = prev
+		self.next = next
+
+	def __str__(self):
+		return str((self.prev, self.val, self.next))
+
+
+class DoubleLinkedList:
+	def __init__(self):
+		self.head = None
+		self.tail = None
+		self._len = 0
+
+	def add(self, node):
+		if not self.head:
+			self.head = node
+		else:
+			node.prev = self.tail
+			self.tail.next = node
+		self.tail = node
+		self._len += 1
+
+	def remove(self, node):
+		if node == self.tail == self.head:
+			self.tail = self.head = None
+
+		elif not node.prev:
+			self.head = node.next
+			self.head.prev = None
+
+		elif not node.next:
+			self.tail = node.prev
+			self.tail.next = None
+
+		else:
+			node.next.prev = node.prev
+			node.prev = node.next
+
+		self._len -= 1
+
+	def __len__(self):
+		return self._len
+
+	def items(self):
+		items = []
+		curr = self.head
+		while curr:
+			items.append(str(curr))
+			curr = curr.next
+		return items
+
+
+class LRSCache:
+	def __init__(self, maxsize):
+		"""
+		Manual implementation of a least recently seen cache where the tail
+		of the DoubleLinkedList is the latest seen node
+
+		(Not currently used, using basic Python dict)
+		"""
+		self.list = DoubleLinkedList()
+		self.maxsize = maxsize
+		self.cache = {}
+
+	def add(self, val):
+		if val in self.cache:
+			self.remove(val)
+		node = ListNode(val)
+		self.cache[val] = node
+		self.list.add(node)
+
+	def remove(self, val):
+		if not val in self.cache:
+			return False
+		node = self.cache[val]
+		del self.cache[val]
+		self.list.remove(node)
+		return None
+
+	def __len__(self):
+		return len(self.cache)
+
+
 class KBucket:
-	def __init__(self, rangeLower, rangeUpper, ksize):
-		self.range = (rangeLower, rangeUpper)
+	def __init__(self, lower_bound, upper_bound, ksize):
+		self.range = (lower_bound, upper_bound)
 		self.nodes = OrderedDict()
 		self.replacement_nodes = OrderedDict()
-		self.touch_last_updated()
+		self.touch_last_seen()
 		self.ksize = ksize
 
-	def touch_last_updated(self):
-		self.last_updated = time.monotonic()
+	def touch_last_seen(self):
+		self.last_seen = time.monotonic()
 
 	def get_nodes(self):
 		return list(self.nodes.values())
@@ -49,18 +136,15 @@ class KBucket:
 				newnode_id, newnode = self.replacement_nodes.popitem()
 				self.nodes[newnode_id] = newnode
 
-	def has_in_range(self, node):
-		return self.range[0] <= node.long_id <= self.range[1]
-
-	def is_new_node(self, node):
-		return node.key not in self.nodes
-
 	def add_node(self, node):
 		"""
+		Section 4.1
+
 		Add a C{Node} to the C{KBucket}.  Return True if successful,
-		False if the bucket is full.
+		False if the bucket is full. Using dict's ability to maintain order
+		of items
+
 		If the bucket is full, keep track of node in a replacement list,
-		per section 4.1 of the paper.
 		"""
 		if node.key in self.nodes:
 			del self.nodes[node.key]
@@ -73,9 +157,6 @@ class KBucket:
 
 		if node.key in self.replacement_nodes:
 			del self.replacement_nodes[node.key]
-			self.replacement_nodes[node.key] = node
-			return False
-
 		self.replacement_nodes[node.key] = node
 		return False
 
@@ -84,8 +165,20 @@ class KBucket:
 		sprefix = shared_prefix([bytes_to_bit_string(n.digest) for n in vals])
 		return len(sprefix)
 
+	def is_full(self):
+		return len(self) == self.ksize
+
 	def head(self):
 		return list(self.nodes.values())[0]
+
+	def has_in_range(self, node):
+		return self.range[0] <= node.long_id <= self.range[1]
+
+	def is_new_node(self, node):
+		return node.key not in self.nodes
+
+	def all_node_count(self):
+		return len(self.get_nodes()) + len(self.get_replacement_nodes())
 
 	def __getitem__(self, node_id):
 		return self.nodes.get(node_id, None)
@@ -93,14 +186,11 @@ class KBucket:
 	def __len__(self):
 		return len(self.nodes)
 
-	def all_node_count(self):
-		return len(self.get_nodes()) + len(self.get_replacement_nodes())
-
 
 class TableTraverser:
 	def __init__(self, table, startNode):
 		index = table.get_bucket_index_for(startNode)
-		table.buckets[index].touch_last_updated()
+		table.buckets[index].touch_last_seen()
 		self.current_nodes = table.buckets[index].get_nodes()
 		self.left_buckets = table.buckets[:index]
 		self.right_buckets = table.buckets[(index + 1):]
@@ -132,17 +222,21 @@ class TableTraverser:
 class RoutingTable:
 	def __init__(self, protocol, ksize, node, maxlong=None):
 		"""
-		@param node: The node that represents this server.  It won't
-		be added to the routing table, but will be needed later to
-		determine which buckets to split or not.
+		Section 2.4
+
+		The routing table is a binary tree whose leaves are k-buckets, with
+		each k-bucket being a leaf of the tree, containing nodes with a common
+		prefix ID
 		"""
 		self.node = node
 		self.protocol = protocol
+		self.cache = LRSCache(maxsize=20)
 		self.ksize = ksize
 		self.maxlong = maxlong or MAX_LONG
 		self.flush()
 
 	def flush(self):
+		""" Each routing table starts with a single k-bucket """
 		self.buckets = [KBucket(0, self.maxlong, self.ksize)]
 
 	def split_bucket(self, index):
@@ -152,33 +246,53 @@ class RoutingTable:
 
 	def lonely_buckets(self):
 		"""
-		Get all of the buckets that haven't been updated in over
-		an hour.
+		Get all of the buckets that haven't been updated in over an hour.
 		"""
 		hrago = time.monotonic() - 3600
-		return [b for b in self.buckets if b.last_updated < hrago and len(b) > 0]
+		return [b for b in self.buckets if b.last_seen < hrago and len(b) > 0]
 
 	def remove_contact(self, node):
+		""" Remove a node from its associated k-bucket """
 		index = self.get_bucket_index_for(node)
 		self.buckets[index].remove_node(node)
 
 	def is_new_node(self, node):
+		""" Determine if the node's intended k-bucket already has the node """
 		index = self.get_bucket_index_for(node)
 		return self.buckets[index].is_new_node(node)
 
-	def add_contact(self, node):
+	def add_contact(self, node, attempted=False):
+		"""
+		Add a node to the routing table
+
+		Section 2.4
+
+		If the intended k-bucket for `node` has len() < ksize, simply add
+		the node to the k-bucket. If the intended-kbucket has len() == ksize,
+		and the intended k-bucket's range includes `self.node` then the k-bucket
+		is split into two new buckets, with the original buckets nodes being
+		distributed into each bucket accordingly. If this derived k-bucket
+		is full after splitting, and the `node` is intended to go into this
+		k-bucket, then the node is dropped
+
+		Section 4.2
+
+		For accelerated lookups, we also split the k-bucket if its depth % b is
+		not congruent to 0
+		"""
 		index = self.get_bucket_index_for(node)
 		bucket = self.buckets[index]
+		bucket.last_seen = time.monotonic()
 
-		# this will succeed unless the bucket is full
+		if bucket.is_full() and attempted:
+			return
+
 		if bucket.add_node(node):
 			return
 
-		# Per section 4.2 of paper, split if the bucket has the node
-		# in its range or if the depth is not congruent to 0 mod 5
-		if bucket.has_in_range(node) or bucket.depth() % 5 != 0:
+		if bucket.has_in_range(self.node) or bucket.depth() % 5 != 0:
 			self.split_bucket(index)
-			self.add_contact(node)
+			self.add_contact(node, True)
 		else:
 			asyncio.ensure_future(self.protocol.call_ping(bucket.head()))
 
@@ -196,10 +310,16 @@ class RoutingTable:
 		k = k or self.ksize
 		nodes = []
 		for neighbor in TableTraverser(self, node):
-			notexcluded = exclude is None or not neighbor.same_home_as(exclude)
+			notexcluded = exclude is None or not neighbor.is_same_node(exclude)
 			if neighbor.key != node.key and notexcluded:
 				heapq.heappush(nodes, (node.distance_to(neighbor), neighbor))
 			if len(nodes) == k:
 				break
 
 		return list(map(operator.itemgetter(1), heapq.nsmallest(k, nodes)))
+
+	def num_nodes(self) -> int:
+		return sum([b.all_node_count() for b in self.buckets])
+
+	def __len__(self) -> int:
+		return len(self.buckets)

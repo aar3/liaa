@@ -5,28 +5,20 @@
 # do much other than instantiate a peer and its storage.
 #
 # This example can be used in tandem with examples/multi_peer_set.py
-#
-# Example
-# -------
-# python examples/simple_peer.py -p 8000
 
+
+# pylint: disable=wrong-import-order,unused-import
 import env
-
 import logging
+import argparse
 import asyncio
 import sys
 import getopt
 
 from liaa.network import Server
-from liaa.utils import ArgsParser, debug_ssl_ctx
+from liaa.utils import load_ssl
 
 
-def usage():
-	return """
-Usage: python simple_peer.py -p [port]
--p --port
-	Port on which to listen (e.g., 8000)
-	"""
 
 def main():
 
@@ -40,22 +32,20 @@ def main():
 	loop = asyncio.get_event_loop()
 	loop.set_debug(True)
 
-	parser = ArgsParser()
+	parser = argparse.ArgumentParser(description='Run a single peer in the network')
+	parser.add_argument('-p', '--port', help='Port to bind interfaces', required=True)
+	parser.add_argument('-c', '--cert', help='Certificate for TLS')
+	parser.add_argument('-k', '--key', help='Private key for TLS')
+	args = vars(parser.parse_args())
 
-	try:
-		opts, _ = getopt.getopt(sys.argv[1:], "p:", ["--port"])
-		parser.add_many(opts)
-	except getopt.GetoptError as err:
-		log.error("GetoptError: %s", err)
-		print(usage())
-		sys.exit(1)
 
-	if parser.has_help_opt() or not parser.has_proper_opts():
-		print(usage())
-		sys.exit(1)
+	port = args.get('p') or args.get('port')
+	key = args.get('k') or args.get('key')
+	cert = args.get('c') or args.get('cert')
 
-	server = Server("0.0.0.0", int(parser.get("-p", "--port")))
-	server.ssl_ctx = debug_ssl_ctx(server.storage.root_dir)
+
+	server = Server("0.0.0.0", port)
+	server.ssl_ctx = load_ssl(cert, key)
 	loop.run_until_complete(server.listen())
 
 	try:

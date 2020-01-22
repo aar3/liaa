@@ -11,19 +11,19 @@ from liaa.utils import rand_str, join_addr
 
 class TestKBucket:
 	# pylint: disable=no-self-use
-	def test_kbucket_instantiation(self):
+	def test_instantiation(self):
 		bucket = KBucket(0, 10, 5)
 		assert isinstance(bucket, KBucket)
-		assert bucket.last_updated
+		assert bucket.last_seen
 
-	def test_kbucket_add_nodes(self, mkpeer):
+	def test_can_add_node(self, mkpeer):
 		bucket = KBucket(0, 10, 2)
 		assert bucket.add_node(mkpeer()) is True
 		assert bucket.add_node(mkpeer()) is True
 		assert bucket.add_node(mkpeer()) is False
 		assert len(bucket) == 2
 
-	def test_kbucket_get_nodes(self, mkpeer):
+	def test_can_get_node(self, mkpeer):
 		bucket = KBucket(0, 10, 2)
 		bucket.add_node(mkpeer())
 		bucket.add_node(mkpeer())
@@ -40,7 +40,7 @@ class TestKBucket:
 		assert bucket.get_nodes() == nodes[:k]
 		assert bucket.get_replacement_nodes() == nodes[k:]
 
-	def test_remove_node_does_nothing_when_node_is_not_in_bucket(self, mkpeer):
+	def test_remove_does_nothing(self, mkpeer):
 		k = 3
 		bucket = KBucket(0, 10, k)
 		nodes = [mkpeer() for _ in range(10)]
@@ -51,7 +51,7 @@ class TestKBucket:
 		assert bucket.get_nodes() == nodes[:k]
 		assert bucket.get_replacement_nodes() == nodes[k:]
 
-	def test_remove_node_replaces_removed_node_with_replacement_node(self, mkpeer):
+	def test_remove_replaces_with_replacement(self, mkpeer):
 		k = 3
 		bucket = KBucket(0, 10, k)
 		nodes = [mkpeer() for x in range(10)]
@@ -77,7 +77,7 @@ class TestKBucket:
 			bucket.remove_node(node)
 		assert not bucket
 
-	def test_split_bucket_regroups_nodes_appropriately(self, mkpeer, mkresource):
+	def test_can_split(self, mkpeer, mkresource):
 		bucket = KBucket(0, 10, 5)
 		bucket.add_node(mkpeer())
 		bucket.add_node(mkresource())
@@ -107,7 +107,7 @@ class TestKBucket:
 		assert bucket.has_in_range(mkresource(key=rand_str(10))) is True
 		assert bucket.has_in_range(mkresource(key=rand_str(16))) is True
 		assert bucket.has_in_range(mkresource(key=rand_str(19))) is True
-		
+
 		try:
 			bucket.has_in_range(mkresource(key=rand_str(21))) is False
 		except OverflowError as err:
@@ -117,7 +117,7 @@ class TestKBucket:
 class TestRoutingTable:
 
 	# pylint: disable=no-self-use
-	def test_can_instantiate_and_flush_table(self, mkpeer):
+	def test_can_flush_table(self, mkpeer):
 		ksize = 3
 		table = RoutingTable(KademliaProtocol, ksize=ksize, node=mkpeer())
 		assert isinstance(table, RoutingTable)
@@ -131,7 +131,7 @@ class TestRoutingTable:
 		table.split_bucket(0)
 		assert len(table.buckets) == 4
 
-	def test_lonely_buckets_returns_stale_buckets(self, mkpeer, mkbucket, mknode):
+	def test_lonely_buckets_returns_stale(self, mkpeer, mkbucket, mknode):
 		ksize = 3
 		table = RoutingTable(KademliaProtocol, ksize, node=mkpeer())
 		table.buckets.append(mkbucket(ksize))
@@ -139,7 +139,7 @@ class TestRoutingTable:
 		table.buckets.append(mkbucket(ksize))
 
 		# make bucket lonely
-		table.buckets[0].last_updated = time.monotonic() - 3600
+		table.buckets[0].last_seen = time.monotonic() - 3600
 		lonelies = table.lonely_buckets()
 		assert len(lonelies) == 1
 
@@ -147,7 +147,7 @@ class TestRoutingTable:
 		ksize = 3
 		table = RoutingTable(KademliaProtocol, ksize, node=mkpeer())
 		table.buckets.append(mkbucket(ksize))
-		assert len(table.buckets[1]) == 0
+		assert not table.buckets[1]
 
 		node = mkpeer()
 		table.add_contact(node)
@@ -156,13 +156,13 @@ class TestRoutingTable:
 
 		table.remove_contact(node)
 		index = table.get_bucket_index_for(node)
-		assert len(table.buckets[index]) == 0
+		assert not table.buckets[index]
 
-	def test_is_new_node_returns_true_when_node_is_new(self, mkpeer):
+	def test_is_new_node(self, mkpeer):
 		table = RoutingTable(KademliaProtocol, 3, node=mkpeer())
 		assert table.is_new_node(mkpeer())
 
-	def test_add_contact_is_ok(self, mkpeer):
+	def test_add_contact(self, mkpeer):
 		ksize = 3
 		table = RoutingTable(KademliaProtocol, ksize, node=mkpeer())
 		table.add_contact(mkpeer())
