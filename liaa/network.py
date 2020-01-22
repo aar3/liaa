@@ -57,7 +57,9 @@ class Server:
 		return self._ssl_ctx
 
 	@ssl_ctx.setter
-	def ssl_ctx(self, ctx: ssl.SSLContext) -> None:
+	def ssl_ctx(self, ctx: Optional[ssl.SSLContext]) -> None:
+		if not ctx:
+			log.warning("%s ssl context being set to none. http traffic not encrypted", self.node)
 		self._ssl_ctx = ctx
 
 	def stop(self) -> None:

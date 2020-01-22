@@ -1,7 +1,7 @@
 from operator import itemgetter
 import heapq
 import logging
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 from liaa import MAX_LONG
 from liaa.utils import hex_to_int, check_dht_value_type, split_addr, pack
@@ -35,7 +35,7 @@ class Node:
 		"""
 		self.value = value
 		self.key = key
-		self.node_type = None
+		self.node_type = 'any'
 		# pylint: disable=invalid-name
 		self.ip = None
 		self.port = None
@@ -54,46 +54,46 @@ class Node:
 	def has_valid_value(self) -> bool:
 		return check_dht_value_type(self.value)
 
-	def is_same_node(self, other: "PeerNode") -> bool:
+	def is_same_node(self, other: "Node") -> bool:
 		return self.key == other.key
 
-	def distance_to(self, node: "PeerNode") -> int:
+	def distance_to(self, node: "Node") -> int:
 		"""
 		Get the distance between this node and another.
 
 		Parameters
 		----------
-			node: PeerNode
+			node: Node
 				Node against which to measure key distance
 		"""
 		return self.long_id ^ node.long_id
 
-	def is_peer_node(self) -> bool:
+	def is_peer_node(self):
 		return isinstance(self.ip, str) and isinstance(self.port, int)
 
-	def __eq__(self, other: "PeerNode") -> bool:
+	def __eq__(self, other: "Node"):
 		return self.key == other.key
 
-	def __iter__(self):
+	def __iter__(self) -> Tuple[str, str, int]:
 		return iter([self.key, self.ip, self.port])
 
-	def __hash__(self):
+	def __hash__(self) -> int:
 		return self.long_id
 
-	def __str__(self):
+	def __str__(self) -> str:
 		return self.node_type + "@" + self.key
 
 
 class PeerNode(Node):
 	def __init__(self, key):
 		super(PeerNode, self).__init__(key, value=None)
-		self.node_type = 'peer'
+		self.node_type = "peer"
 
 
 class ResourceNode(Node):
 	def __init__(self, key, value=None):
 		super(ResourceNode, self).__init__(key, value=value)
-		self.node_type = 'resource'
+		self.node_type = "resource"
 
 
 class NodeHeap:
