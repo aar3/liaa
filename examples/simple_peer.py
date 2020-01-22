@@ -10,8 +10,8 @@
 # -------
 # python examples/simple_peer.py -p 8000
 
+# pylint: disable=wrong-import-order,unused-import
 import env
-
 import logging
 import asyncio
 import sys

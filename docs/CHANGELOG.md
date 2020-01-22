@@ -30,3 +30,5 @@
       - base node IDs off of ip:port, and search keys and adjust tests
    - [enhancement] add self-signed tls to http iface
    - [technical] verify crawling implementation and add tests
+### 1.12.19
+   - [enhancement] continue adding tests and dostctrings

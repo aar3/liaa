@@ -495,13 +495,13 @@ class KademliaProtocol(RPCDatagramProtocol):
 		return self.source_node.key
 
 	# pylint: disable=unused-argument
-	def rpc_store(self, sender: "PeerNode", node_id: str, key: str, value: bytes) -> bool:
+	def rpc_store(self, sender: Tuple[str, int], node_id: str, key: str, value: bytes) -> bool:
 		"""
 		Store data from a given sender
 
 		Parameters
 		----------
-			sender: PeerNode
+			sender: Tuple[str, int]
 				Node that is initiating/requesting store
 			node_id: str
 				ID of node that is initiating/requesting store
@@ -515,9 +515,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 			bool:
 				Indicator of successful operation
 		"""
-		# pylint: disable=fixme
-		# TODO: this might raise a bug if is not guaranteed to be peer
-		source = PeerNode(join_addr((sender.ip, sender.port)))
+		source = PeerNode(join_addr(sender))
 		self.welcome_if_new(source)
 		# pylint: disable=bad-continuation
 		log.debug("%s got store request from %s, storing %iB at %s",
@@ -529,7 +527,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 	def rpc_find_node(self, sender: "PeerNode", node_id: str, key: str) \
 		-> List[Tuple[int, str, int]]:
 		"""
-		Return a list of peers that are closest to a given key (node_id to be found)
+		Return a list of nodes that are closest to a given key (node_id to be found)
 
 		Parameters
 		----------
@@ -542,13 +540,14 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 		Returns
 		-------
-			List[Tuple[int, str, int]]:
-				Addresses of closest neighbors in regards to resource `key`
+			Tuple representations of closest neighbors in regards to `key`
+			which will be either Tuple[str, str, int] if node is a peer or,
+			Tuple[str, None, Optional[bytes]] if node is resource
 		"""
 		source = PeerNode(node_id)
 		log.info("%s finding neighbors of %s in local table", self.source_node, source)
 		self.welcome_if_new(source)
-		node = Node(key, value=None)
+		node = Node(key)
 		neighbors = self.router.find_neighbors(node, exclude=source)
 		return list(map(tuple, neighbors))
 
@@ -577,7 +576,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		"""
 		source = PeerNode(node_id)
 		self.welcome_if_new(source)
-		value = self.storage.get(key, None)
+		value = self.storage.get(key)
 		if value is None:
 			return self.rpc_find_node(sender, node_id, key)
 		return {"value": value}
@@ -680,6 +679,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 			node: PeerNode
 				Node to add to routing table
 		"""
+		# because we can only call_store on peers
 		if not self.router.is_new_node(node) or isinstance(node, ResourceNode):
 			return
 

@@ -23,7 +23,7 @@ def pre_prune():
 	"""
 	def wrapper(func):
 		@functools.wraps(func)
-		def _pre_prune(*args):
+		def _pre_prune(*args, **kwargs):
 			"""
 			Parameters
 			----------
@@ -32,7 +32,7 @@ def pre_prune():
 			"""
 			log.debug("%s pruning items...", args[0].node)
 			args[0].prune()
-			return func(*args)
+			return func(*args, **kwargs)
 		return _pre_prune
 	return wrapper
 
