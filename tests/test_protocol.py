@@ -16,7 +16,7 @@ from liaa.protocol import (
 	Header
 )
 from liaa.routing import RoutingTable
-from liaa.node import Node, ResourceNode, PeerNode
+from liaa.node import Node, ResourceNode
 from liaa.storage import EphemeralStorage, StorageIface, IStorage
 
 
@@ -29,10 +29,7 @@ class TestRPCDatagramProtocol:
 		proto = RPCDatagramProtocol(node, wait=5)
 		assert isinstance(proto, RPCDatagramProtocol)
 		assert proto.source_node.key == node.key
-		# assert len(proto._outstanding_msgs) == 0
-
-		# pylint: disable=protected-access
-		assert len(proto._queue) == 0
+		assert not proto._queue
 
 	def test_accept_request(self, mkpeer, mkdgram, sandbox):
 		node = mkpeer()
@@ -40,7 +37,7 @@ class TestRPCDatagramProtocol:
 
 		box = sandbox(proto)
 
-		def accept_request_stub(dgram, address):
+		def accept_request_stub(dgram, _):
 			_, data = dgram[1:21], umsgpack.unpackb(dgram[21:])
 			funcname, args = data
 			funcname = 'rpc_' + funcname
@@ -82,7 +79,7 @@ class TestRPCDatagramProtocol:
 		msgid, address = proto._accept_response(dgram, proto, address)
 		assert msgid == base64.b64encode(dgram[1:21])
 		assert address == address
-		assert len(proto._queue) == 0
+		assert not proto._queue
 
 	def test_accept_response_returns_empty(self, mkpeer, mkdgram):
 		node = mkpeer()
@@ -148,25 +145,22 @@ class TestKademliaProtocol:
 	def test_can_get_refresh_ids(self, fake_proto, mknode):
 		ksize = 3
 		proto = fake_proto(ksize=ksize)
-		# manually set maxlong and the node.long_id else get a memory error
-		# because the MAX_LONG address space is so large, it will just keep
-		# splitting buckets (as it should)
-		proto.router = RoutingTable(proto, ksize, proto.source_node, maxlong=10)
+		proto.router = RoutingTable(proto, ksize, proto.source_node)
 		for x in range(4):
 			node = mknode()
 			node.long_id = x
 			proto.router.add_contact(node)
 
-		assert len(proto.router.buckets) == 3
+		assert len(proto.router.buckets) == 2
 
 		# randomly pick some buckets to make stale
 		sample = random.sample(proto.router.buckets, 2)
 		for bucket in sample:
-			bucket.last_updated = time.monotonic() - 3600
+			bucket.last_seen = time.monotonic() - 3600
 
 		to_refresh = proto.get_refresh_ids()
 		assert isinstance(to_refresh, list)
-		assert len(to_refresh) > 0
+		assert to_refresh
 		assert all([isinstance(n, Node) for n in to_refresh])
 
 	def test_rpc_stun_returns_node(self, mkpeer, fake_proto):
@@ -332,7 +326,7 @@ class TestKademliaProtocol:
 		proto = fake_proto()
 		sender = mkpeer()
 		result = proto.rpc_find_node(sender, sender.key, 'notAKey')
-		assert len(result) == 0
+		assert not result
 
 	def test_rpc_find_value_returns_value(self, fake_proto, mkpeer, mkresource):
 		proto = fake_proto()

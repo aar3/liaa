@@ -6,12 +6,10 @@ from liaa.utils import (
 	shared_prefix,
 	bytes_to_bit_string,
 	hex_to_int,
-	ArgsParser,
 	check_dht_value_type,
 	gather_dict,
 	join_addr,
 	split_addr,
-	digest_to_int,
 	rand_str,
 	pack,
 	rand_int_id,
@@ -106,11 +104,6 @@ class TestUtils:
 		assert isinstance(result, int)
 		assert 0 < result < MAX_LONG
 
-	def test_digest_to_int(self):
-		num = 10
-		byte_arr = num.to_bytes(20, byteorder='big')
-		assert digest_to_int(byte_arr) == num
-
 	def test_int_to_digest(self):
 		num = 10
 		byte_arr = num.to_bytes(BASE_INT, byteorder='big')
@@ -121,26 +114,3 @@ class TestUtils:
 		long = int(pack(key).hex(), BASE_INT)
 		_, inverse = long_to_key(long)
 		assert inverse.decode() == key
-
-class TestArgsParser:
-
-	# pylint: disable=no-self-use
-	def test_can_set_and_get_via_primary_flag(self):
-		parser = ArgsParser()
-		opts = [("-f", "foo"), ("--bar", "bar"), ("-z", "1")]
-		parser.add_many(opts)
-
-		assert parser.get("-f", "--foo") == "foo"
-
-	def test_can_set_and_get_via_secondary_flag(self):
-		parser = ArgsParser()
-		opts = [("--foo", "foo"), ("--bar", "bar"), ("-z", "1")]
-		parser.add_many(opts)
-
-		assert parser.get("-f", "--foo") == "foo"
-
-	def test_has_help_opt_is_true(self):
-		parser = ArgsParser()
-		opts = [("-h", "")]
-		parser.add_many(opts)
-		assert parser.has_help_opt()

@@ -1,9 +1,7 @@
 import asyncio
 import logging
 import os
-import ssl
 import pickle
-from typing import List, Optional, Tuple
 
 from liaa.crawling import NodeSpiderCrawl, ValueSpiderCrawl
 from liaa.node import Node, PeerNode, ResourceNode
@@ -19,7 +17,7 @@ class Server:
 
 	protocol_class = KademliaProtocol
 
-	def __init__(self, interface: str, port: int, ksize: int = 20, alpha: int = 3, **kwargs):
+	def __init__(self, interface, port, ksize=20, alpha=3, **kwargs):
 		"""
 		High level view of a node instance.  This is the object that should be
 		created to start listening as an active node on the network.
@@ -53,16 +51,26 @@ class Server:
 		self._ssl_ctx = None
 
 	@property
-	def ssl_ctx(self) -> ssl.SSLContext:
+	def ssl_ctx(self):
+		"""
+		Returns
+		-------
+			ssl.SSLContext
+		"""
 		return self._ssl_ctx
 
 	@ssl_ctx.setter
-	def ssl_ctx(self, ctx: Optional[ssl.SSLContext]) -> None:
+	def ssl_ctx(self, ctx):
+		"""
+		Parameters
+		----------
+			ctx: Optional[ssl.SSLContext]
+		"""
 		if not ctx:
 			log.warning("%s ssl context being set to none. http traffic not encrypted", self.node)
 		self._ssl_ctx = ctx
 
-	def stop(self) -> None:
+	def stop(self):
 		"""
 		Stop a currently running server - all event loops, and close
 		all open network connections
@@ -83,7 +91,7 @@ class Server:
 			log.info("Closing %s server...", self.node)
 			asyncio.ensure_future(self.listener.wait_closed())
 
-	def _create_protocol(self) -> "KademliaProtocol":
+	def _create_protocol(self):
 		"""
 		Create an instance of the Kademlia protocol
 
@@ -94,7 +102,7 @@ class Server:
 		"""
 		return self.protocol_class(self.node, self.storage, self.ksize)
 
-	def _create_http_iface(self) -> "HttpInterface":
+	def _create_http_iface(self):
 		"""
 		Create an interface to accept incoming http messages
 
@@ -105,7 +113,7 @@ class Server:
 		"""
 		return HttpInterface(self.node, self.storage)
 
-	async def listen(self) -> None:
+	async def listen(self):
 		"""
 		Create UDP and HTTP listeners on the server
 		"""
@@ -128,7 +136,7 @@ class Server:
 
 		asyncio.ensure_future(self.listener.serve_forever())
 
-	def refresh_table(self) -> None:
+	def refresh_table(self):
 		"""
 		Refresh our routing table and save our server's state
 		"""
@@ -139,12 +147,13 @@ class Server:
 		self.refresh_loop = loop.call_later(interval, self.refresh_table)
 		self.save_state_loop = loop.call_later(interval, self.save_state_regularly)
 
-	async def _refresh_table(self) -> None:
+	async def _refresh_table(self):
 		"""
+		Section 2.3
+
 		Refresh buckets that haven't had any lookups in the last hour
-		(per section 2.3 of the paper).
 		"""
-		results: List[asyncio.Future] = []
+		results = []
 		for key in self.protocol.get_refresh_ids():
 			node = Node(key=key)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
@@ -158,7 +167,7 @@ class Server:
 			log.debug("%s republishing node %s from store", self.node, node)
 			await self.set_digest(node)
 
-	def bootstrappable_neighbors(self) -> List["PeerNode"]:
+	def bootstrappable_neighbors(self):
 		"""
 		Get a list of (ip, port) tuple pairs suitable for use as an argument to
 		the bootstrap method.
@@ -176,7 +185,7 @@ class Server:
 		neighbors = self.protocol.router.find_neighbors(self.node)
 		return [tuple(n)[-2:] for n in neighbors]
 
-	async def bootstrap(self, addrs: List[Tuple[str, int]]) -> asyncio.Future:
+	async def bootstrap(self, addrs):
 		"""
 		Bootstrap the server by connecting to other known nodes in the network.
 
@@ -199,7 +208,7 @@ class Server:
 		spider = NodeSpiderCrawl(self.protocol, self.node, nodes, self.ksize, self.alpha)
 		return await spider.find()
 
-	async def bootstrap_node(self, addr: Tuple[str, int]) -> Optional["PeerNode"]:
+	async def bootstrap_node(self, addr):
 		"""
 		Ping a given address so that both `addr` and `self.node` can know
 		about one another
@@ -218,7 +227,7 @@ class Server:
 		result = await self.protocol.ping(addr, self.node.key)
 		return PeerNode(key=join_addr((addr[0], addr[1]))) if result[0] else None
 
-	async def get(self, key: str) -> asyncio.Future:
+	async def get(self, key):
 		"""
 		Crawl the current node's known network in order to find a given key. This
 		is the interface for grabbing a key from the network
@@ -241,7 +250,7 @@ class Server:
 		if result is not None:
 			return result
 
-		node = ResourceNode(key)
+		node = ResourceNode(key, value=None)
 		nearest = self.protocol.router.find_neighbors(node)
 
 		if not nearest:
@@ -251,7 +260,7 @@ class Server:
 		spider = ValueSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
 		return await spider.find()
 
-	async def set(self, node: "Node") -> asyncio.Future:
+	async def set(self, node):
 		"""
 		Set the given string key to the given value in the network. This is the
 		interface for setting a key throughout the network
@@ -271,7 +280,7 @@ class Server:
 		log.info("%s setting '%s' = '%s' on network", str(node), node.key, node.value)
 		return await self.set_digest(node)
 
-	async def set_digest(self, node: "ResourceNode") -> bool:
+	async def set_digest(self, node):
 		"""
 		Set the given SHA1 digest key (bytes) to the given value in the
 		network.
@@ -305,14 +314,14 @@ class Server:
 		# return true only if at least one store call succeeded
 		return any(await asyncio.gather(*results))
 
-	def save_state(self, fname: Optional[str] = None) -> None:
+	def save_state(self, fname=None):
 		"""
 		Save the state of this node (the alpha/ksize/id/immediate neighbors)
 		to a cache file with the given fname.
 
 		Parameters
 		----------
-			fname: str
+			fname: Optional[str]
 				File location where in which to write state
 		"""
 		fname = fname or self.statefile
@@ -335,7 +344,7 @@ class Server:
 		with open(fname, 'wb') as file:
 			pickle.dump(data, file)
 
-	def load_state(self, fname: Optional[str] = None) -> "Server":
+	def load_state(self, fname=None):
 		"""
 		Load the state of this node (the alpha/ksize/id/immediate neighbors)
 		from a cache file with the given fname.
@@ -364,8 +373,7 @@ class Server:
 
 		return svr
 
-	# pylint: disable=bad-continuation
-	def save_state_regularly(self, fname: Optional[str] = None, frequency: int = 600) -> None:
+	def save_state_regularly(self, fname=None, frequency=600):
 		"""
 		Save the state of node with a given regularity to the given
 		filename.
