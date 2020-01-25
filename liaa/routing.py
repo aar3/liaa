@@ -102,10 +102,10 @@ class KBucket:
 		self.range = (lower_bound, upper_bound)
 		self.nodes = OrderedDict()
 		self.replacement_nodes = OrderedDict()
-		self.touch_last_seen()
+		self.set_last_seen()
 		self.ksize = ksize
 
-	def touch_last_seen(self):
+	def set_last_seen(self):
 		self.last_seen = time.monotonic()
 
 	def get_nodes(self):
@@ -177,7 +177,7 @@ class KBucket:
 	def is_new_node(self, node):
 		return node.key not in self.nodes
 
-	def all_node_count(self):
+	def total_nodes(self):
 		return len(self.get_nodes()) + len(self.get_replacement_nodes())
 
 	def __getitem__(self, node_id):
@@ -190,7 +190,7 @@ class KBucket:
 class TableTraverser:
 	def __init__(self, table, startNode):
 		index = table.get_bucket_index_for(startNode)
-		table.buckets[index].touch_last_seen()
+		table.buckets[index].set_last_seen()
 		self.current_nodes = table.buckets[index].get_nodes()
 		self.left_buckets = table.buckets[:index]
 		self.right_buckets = table.buckets[(index + 1):]
@@ -265,6 +265,13 @@ class RoutingTable:
 		"""
 		Add a node to the routing table
 
+		Section 2.2
+
+		If a k-bucket is full, call the head (last-seen node), if a response
+		is received, discard the new node, else replace the new node with the
+		non-responsive head. This implementation also acts as a form of DOS
+		resistance
+
 		Section 2.4
 
 		If the intended k-bucket for `node` has len() < ksize, simply add
@@ -282,19 +289,26 @@ class RoutingTable:
 		"""
 		index = self.get_bucket_index_for(node)
 		bucket = self.buckets[index]
-		bucket.last_seen = time.monotonic()
+		bucket.set_last_seen()
 
 		if bucket.is_full() and attempted:
-			return
+			return None
 
 		if bucket.add_node(node):
-			return
+			return None
 
 		if bucket.has_in_range(self.node) or bucket.depth() % 5 != 0:
 			self.split_bucket(index)
-			self.add_contact(node, True)
-		else:
-			asyncio.ensure_future(self.protocol.call_ping(bucket.head()))
+			return self.add_contact(node, True)
+
+		if bucket.is_full():
+			result = asyncio.ensure_future(self.protocol.call_ping(bucket.head()))
+			if not result:
+				items = bucket.nodes.items()
+				items[0] = (node.key, node)
+				bucket.nodes = dict(zip(items))
+		return None
+
 
 	def get_bucket_index_for(self, node):
 		"""
@@ -318,8 +332,11 @@ class RoutingTable:
 
 		return list(map(operator.itemgetter(1), heapq.nsmallest(k, nodes)))
 
-	def num_nodes(self) -> int:
-		return sum([b.all_node_count() for b in self.buckets])
-
-	def __len__(self) -> int:
+	def num_buckets(self):
 		return len(self.buckets)
+
+	def num_nodes(self):
+		return sum([len(b) for b in self.buckets])
+
+	def total_nodes(self):
+		return sum([b.total_nodes() for b in self.buckets])

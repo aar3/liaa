@@ -79,12 +79,13 @@ class PeerNode(Node):
 
 
 class ResourceNode(Node):
-	def __init__(self, key, value):
+	def __init__(self, key, value, birthday=None):
 		"""
 		Referenced as the {key, value} pair in the protocol
 		"""
 		super(ResourceNode, self).__init__(key, value)
 		self.node_type = "resource"
+		self.birthday = birthday
 
 
 class NodeHeap:

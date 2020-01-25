@@ -1,5 +1,4 @@
 
-import datetime as dt
 import functools
 import logging
 import operator
@@ -7,9 +6,7 @@ import os
 import pickle
 import time
 from collections import OrderedDict
-from collections.abc import Iterable
 from itertools import takewhile
-from typing import List, Optional, Tuple
 
 from liaa.node import ResourceNode
 
@@ -18,8 +15,7 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def pre_prune():
 	"""
-	Decorator (syntactic sugar) for a storage interface's `prune()`
-	method
+	Decorator (syntactic sugar) for a storage interface's prune() method
 	"""
 	def wrapper(func):
 		@functools.wraps(func)
@@ -37,10 +33,9 @@ def pre_prune():
 	return wrapper
 
 
-# pylint: disable=too-few-public-methods
 class IStorage:
 	"""
-	IStorage
+	Base storage interface
 
 	Parameters
 	----------
@@ -50,7 +45,7 @@ class IStorage:
 			Max age that items can live untouched before being pruned
 			(default=604800 seconds = 1 week)
 	"""
-	def __init__(self, node: "PeerNode", ttl: int = 604800):
+	def __init__(self, node, ttl=604800):
 		self.node = node
 		self.ttl = ttl
 		self.root_dir = os.path.join(os.path.expanduser("~"), ".liaa")
@@ -63,9 +58,46 @@ class IStorage:
 			log.debug("Node dir at %s not found, creating...", self.dir)
 			os.mkdir(self.dir)
 
+	def prune(self):
+		""" Prune storage interface """
+		items = self.iter_older_than(self.ttl)
+		log.debug("%s pruning 0 items older than %i", self.node, self.ttl)
+		for key, _ in items:
+			self.remove(key)
+
+	def iter_older_than(self, seconds_old):
+		"""
+		Return nodes that are older than `seconds_old`
+
+		** For EphemeralStorage we use operator.itemgetter(0, 2) in order to
+		return just keys and values (without time.monotonic())
+
+		Parameters
+		----------
+			seconds_old: int
+				Time threshold (seconds)
+
+		Returns
+		-------
+			List[Tuple[int, bytes]]:
+				Zipped keys, and values of nodes that are older that `seconds_old`
+		"""
+		min_birthday = time.monotonic() - seconds_old
+		zipped = self._triple_iter()
+		matches = takewhile(lambda r: min_birthday >= r[2], zipped)
+		items = list(map(operator.itemgetter(0, 1), matches))
+		log.debug("%s returning %i nodes via iter_older_than=%i", self.node, len(items), seconds_old)
+		return items
+
+	def remove(self, key):
+		raise NotImplementedError
+
+	def _triple_iter(self):
+		raise NotImplementedError
+
 
 class EphemeralStorage(IStorage):
-	def __init__(self, node: "PeerNode", ttl=604800):
+	def __init__(self, node, ttl=604800):
 		"""
 		EphemeralStorage
 
@@ -73,15 +105,12 @@ class EphemeralStorage(IStorage):
 		----------
 			node: PeerNode
 				The node representing this peer
-			ttl: int
-				Max age that items can live untouched before being pruned
-				(default=604800 seconds = 1 week)
 		"""
 		super(EphemeralStorage, self).__init__(node, ttl)
 		self.data = OrderedDict()
 
 	@pre_prune()
-	def get(self, key: str) -> Optional["ResourceNode"]:
+	def get(self, key):
 		"""
 		Retrieve a node from storage
 
@@ -104,7 +133,7 @@ class EphemeralStorage(IStorage):
 		log.debug("Node %s not found on node %s", key, self.node)
 		return None
 
-	def set(self, node: "ResourceNode"):
+	def set(self, node):
 		"""
 		Save a given Node in storage
 
@@ -119,7 +148,7 @@ class EphemeralStorage(IStorage):
 		self.data[node.key] = (time.monotonic(), node.value)
 		log.debug("%s storage has %i items", self.node, len(self))
 
-	def remove(self, key: str) -> None:
+	def remove(self, key):
 		"""
 		Remove a node from storage
 
@@ -133,70 +162,35 @@ class EphemeralStorage(IStorage):
 		del self.data[key]
 		log.debug("Resource %s not found on node %s", key, self.node)
 
-	def prune(self) -> None:
+	def _triple_iter(self):
 		"""
-		Prune storage
-		"""
-		for _, _ in self.iter_older_than(self.ttl):
-			self.data.popitem(last=False)
-
-	def iter_older_than(self, seconds_old: int) -> List[Tuple[int, bytes]]:
-		"""
-		Return nodes that are older than `seconds_old`
-
-		** For EphemeralStorage we use operator.itemgetter(0, 2) in order to
-		return just keys and values (without time.monotonic())
-
-		Parameters
-		----------
-			seconds_old: int
-				Time threshold (seconds)
-
-		Returns
-		-------
-			List[Tuple[int, bytes]]:
-				Zipped keys, and values of nodes that are older that `seconds_old`
-		"""
-		min_birthday = time.monotonic() - seconds_old
-		zipped = self._triple_iter()
-		matches = takewhile(lambda r: min_birthday >= r[1], zipped)
-		items = list(map(operator.itemgetter(0, 2), matches))
-		log.debug("%s returning %i nodes for republishing....", self.node, len(items))
-		return items
-
-	def _triple_iter(self) -> Iterable:
-		"""
-		Iterate over EphermeralStorage to return each contents key, time,
-		and values
+		Iterate over storage to return each contents key, time, and values
 		"""
 		ikeys = self.data.keys()
 		ibirthday = map(operator.itemgetter(0), self.data.values())
 		ivalues = map(operator.itemgetter(1), self.data.values())
-		return zip(ikeys, ibirthday, ivalues)
+		return zip(ikeys, ivalues, ibirthday)
 
 	@pre_prune()
-	def __iter__(self) -> Iterable:
+	def __iter__(self):
 		log.debug("%s iterating over %i items in storage", self.node, len(self.data))
-		ikeys = self.data.keys()
-		ivalues = map(operator.itemgetter(1), self.data.values())
-		nodes = [ResourceNode(key=p[0], value=p[1]) for p in zip(ikeys, ivalues)]
+		items = self._triple_iter()
+		nodes = [ResourceNode(*item) for item in items]
 
 		for node in nodes:
 			yield node
 
-	def __contains__(self, key: str) -> bool:
+	def __contains__(self, key):
 		return key in self.data
 
-	@pre_prune()
-	def __len__(self) -> int:
+	def __len__(self):
 		return len(self.data)
 
 
 class DiskStorage(IStorage):
-	# pylint: disable=bad-continuation
-	def __init__(self, node: "ResourceNode", ttl=604800):
+	def __init__(self, node, ttl=604800):
 		"""
-		DiskStorage
+		Interface for disk storage
 
 		Parameters
 		----------
@@ -213,7 +207,7 @@ class DiskStorage(IStorage):
 			os.mkdir(self.content_dir)
 
 	@pre_prune()
-	def get(self, key: str) -> Optional["Node"]:
+	def get(self, key):
 		"""
 		Retrieve a node from storage
 
@@ -231,11 +225,12 @@ class DiskStorage(IStorage):
 		"""
 		log.debug("%s fetching node %s", self.node, key)
 		if key in self:
-			return ResourceNode(key, value=self._load_data(key))
+			birthday, value = self._load_data(key)
+			return ResourceNode(key, value, birthday)
 		log.debug("Node %s not found on node %s", key, self.node)
 		return None
 
-	def set(self, node: "PeerNode") -> None:
+	def set(self, node):
 		"""
 		Save a given Node in storage
 
@@ -247,10 +242,10 @@ class DiskStorage(IStorage):
 		if node.key in self:
 			self.remove(node.key)
 		log.debug("%s setting node %s", self.node, node.key)
-		self._persist_data(node)
+		self._persist_data(time.monotonic(), node)
 		log.debug("%s storage has %i items", self.node, len(self))
 
-	def remove(self, key: str) -> None:
+	def remove(self, key):
 		"""
 		Remove a node from storage
 
@@ -264,34 +259,17 @@ class DiskStorage(IStorage):
 		log.debug("%s removing node %s", self.node, key)
 		os.remove(fname)
 
-	def iter_older_than(self, seconds_old: int) -> Iterable:
+	def _triple_iter(self):
 		"""
-		Return nodes that are older than `seconds_old`
-
-		Parameters
-		----------
-			seconds_old: int
-				Time threshold (seconds)
-
-		Returns
-		-------
-			Iterable:
-				Zipped keys, and values of nodes that are older that `seconds_old`
+		Iterate over storage to return each contents key, time, and values
 		"""
-		to_republish = filter(lambda t: t[1] > seconds_old, self._content_stats())
-		repub_keys = list(map(operator.itemgetter(0), to_republish))
-		repub_data = [self._load_data(k) for k in repub_keys]
-		log.debug("%s returning %i nodes for republishing....", self.node, len(repub_keys))
-		return zip(repub_keys, repub_data)
+		items = [self._load_data(k) for k in self.contents()]
+		bdays = [item[0] for item in items]
+		values = [item[1] for item in items]
+		return zip(self.contents(), values, bdays)
 
-	def prune(self) -> None:
-		"""
-		Prune storage
-		"""
-		for key, _ in self.iter_older_than(self.ttl):
-			self.remove(key)
 
-	def contents(self) -> List[str]:
+	def contents(self):
 		"""
 		List all nodes in storage
 
@@ -302,22 +280,24 @@ class DiskStorage(IStorage):
 		"""
 		return os.listdir(self.content_dir)
 
-	def _persist_data(self, node: "ResourceNode") -> None:
+	def _persist_data(self, birthday, node):
 		"""
 		Save a given node's value to disk
 
 		Parameters
 		----------
+			birthday: float
+				time.monotonic() when savind item
 			node: ResourceNode
 				The node to save
 		"""
 		fname = os.path.join(self.content_dir, node.key)
 		log.debug("%s attempting to persist %s", self.node, node.key)
-		data = {"value": node.value, "time": time.monotonic()}
+		data = {"value": node.value, "time": birthday}
 		with open(fname, "wb") as ctx:
 			pickle.dump(data, ctx)
 
-	def _load_data(self, key: str) -> Optional[bytes]:
+	def _load_data(self, key):
 		"""
 		Load a data at a given key
 
@@ -336,40 +316,22 @@ class DiskStorage(IStorage):
 		try:
 			with open(fname, "rb") as ctx:
 				data = pickle.load(ctx)
-				return data["value"]
+				return (data["time"], data["value"])
 		except FileNotFoundError as err:
 			log.error("%s could not load key at %s: %s", self.node, key, str(err))
 
-	def _content_stats(self) -> List[Tuple[str, float]]:
-		"""
-		For each node in storage, return its 'last modified time'
-
-		Returns
-		-------
-			List[Tuple[str, float]]
-				List of (filename, last_modified_time) pairs
-		"""
-		def time_delta(key: str) -> Tuple[str, float]:
-			path = os.path.join(self.content_dir, key)
-			statbuff = os.stat(path)
-			diff = dt.datetime.fromtimestamp(time.time()) - dt.datetime.fromtimestamp(statbuff.st_mtime)
-			return key, diff.seconds
-		return list(map(time_delta, self.contents()))
-
 	@pre_prune()
-	def __iter__(self) -> Iterable:
+	def __iter__(self):
 		log.debug("%s iterating over %i items in storage", self.node, len(self.contents()))
-		ikeys = self.contents()
-		ivalues = [self._load_data(k) for k in ikeys]
-		nodes = [ResourceNode(key=p[0], value=p[1]) for p in zip(ikeys, ivalues)]
+		items = self._triple_iter()
+		nodes = [ResourceNode(*item) for item in items]
 		for node in nodes:
 			yield node
 
-	def __contains__(self, key: str) -> bool:
+	def __contains__(self, key):
 		return key in self.contents()
 
-	@pre_prune()
-	def __len__(self) -> int:
+	def __len__(self):
 		return len(self.contents())
 
 

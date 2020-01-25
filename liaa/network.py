@@ -277,7 +277,7 @@ class Server:
 		"""
 		if not node.has_valid_value():
 			log.error("Value must be of type int, float, bool, str, or bytes")
-		log.info("%s setting '%s' = '%s' on network", str(node), node.key, node.value)
+		log.info("%s setting %s on network", str(self.node), str(node))
 		return await self.set_digest(node)
 
 	async def set_digest(self, node):

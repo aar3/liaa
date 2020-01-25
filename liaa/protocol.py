@@ -695,6 +695,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 			if not neighbors or (is_closer_than_furthest and curr_distance_to_new):
 				asyncio.ensure_future(self.call_store(node, inode.key, inode.value))
 
+		# entry point for all nodes in the network to our router
 		self.router.add_contact(node)
 
 	def handle_call_response(self, result, node):
