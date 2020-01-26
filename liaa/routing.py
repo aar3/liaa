@@ -1,6 +1,7 @@
 import heapq
 import time
 import logging
+import copy
 import operator
 import asyncio
 
@@ -53,30 +54,23 @@ class DoubleLinkedList:
 	def remove(self, node):
 		if node == self.tail == self.head:
 			self.tail = self.head = None
-
 		elif not node.prev:
 			self.head = node.next
 			self.head.prev = None
-
 		elif not node.next:
 			self.tail = node.prev
 			self.tail.next = None
-
 		else:
 			node.next.prev = node.prev
 			node.prev = node.next
-		self._len -= 1
 
-	def __len__(self):
-		return self._len
+		self._len = max(0, self._len-1)
 
-	def items(self):
-		items = []
+	def print_items(self):
 		curr = self.head
 		while curr:
-			items.append(str(curr))
+			print(str(curr))
 			curr = curr.next
-		return items
 
 	def pop(self):
 		"""
@@ -86,18 +80,22 @@ class DoubleLinkedList:
 		(i.e., the most recently seen items) from k-bucket replacement node
 		cache, and add them to k-bucket regular node cache
 		"""
-		if not self.tail:
-			return False
+		if not self:
+			raise ValueError('Cannot pop from empty linked list')
 
 		if self.tail == self.head:
-			node = self.tail
+			node = copy.deepcopy(self.tail)
 			self.tail = self.head = None
 			return node
 
 		self.tail.prev.next = None
-		node = self.tail
-		self.tail = node.prev
+		node = copy.deepcopy(self.tail)
+		self.tail = self.tail.prev
+		self._len = max(0, self._len-1)
 		return node
+
+	def __len__(self):
+		return self._len
 
 
 class LRUCache:
@@ -114,7 +112,7 @@ class LRUCache:
 	def add(self, key, value):
 		if len(self) == self.maxsize:
 			raise RuntimeError('LRUCache has exceeded maxsize=%i' % self.maxsize)
-		if key in self.items:
+		if key in self:
 			self.remove(key)
 		node = ListNode(key, value)
 		self.items[key] = node
@@ -129,26 +127,24 @@ class LRUCache:
 		because this will be a node we haven't seen
 		"""
 		if len(self) == self.maxsize:
-			log.error('LRUCache has exceeded maxsize=%i', self.maxsize)
-			return False
+			raise RuntimeError('LRUCache has exceeded maxsize=%i' % self.maxsize)
 		node = ListNode(key, value)
 		self.items[key] = node
 		self.list.add_head(node)
-		return True
 
 	def remove(self, key):
 		if not key in self.items:
 			raise KeyError("Key %s does not exist in cache" % key)
 		node = self.items[key]
-		del self.items[key]
 		self.list.remove(node)
+		del self.items[key]
 
 	def pop(self):
 		node = self.list.pop()
 		if node:
 			del self.items[node.key]
 			return node.key, node.val
-		raise ValueError("Could not pop from list")
+		raise ValueError("Cache is empty")
 
 	def __getitem__(self, key):
 		if not key in self:
@@ -271,8 +267,8 @@ class KBucket:
 
 
 class TableTraverser:
-	def __init__(self, table, startNode):
-		index = table.get_bucket_index_for(startNode)
+	def __init__(self, table, start_node):
+		index = table.get_bucket_index_for(start_node)
 		table.buckets[index].set_last_seen()
 		self.current_nodes = table.buckets[index].get_nodes()
 		self.left_buckets = table.buckets[:index]

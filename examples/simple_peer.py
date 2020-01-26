@@ -13,9 +13,8 @@ import logging
 import argparse
 import asyncio
 import sys
-import getopt
 
-from liaa.network import Server
+from liaa.server import Server
 from liaa.utils import load_ssl
 
 
@@ -38,11 +37,9 @@ def main():
 	parser.add_argument('-k', '--key', help='Private key for TLS')
 	args = vars(parser.parse_args())
 
-
 	port = args.get('p') or args.get('port')
 	key = args.get('k') or args.get('key')
 	cert = args.get('c') or args.get('cert')
-
 
 	server = Server("0.0.0.0", port)
 	server.ssl_ctx = load_ssl(cert, key)

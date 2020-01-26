@@ -1,7 +1,7 @@
 import pytest
 
-from liaa.crawling import SpiderCrawl
-from liaa.network import KademliaProtocol
+from liaa.crawler import SpiderCrawl
+from liaa.protocol import KademliaProtocol
 from liaa.node import NodeHeap
 
 
@@ -23,10 +23,10 @@ class TestSpiderCrawl:
 		crawler = fake_spider_crawler(node=mkpeer())
 		assert isinstance(crawler, SpiderCrawl)
 		assert isinstance(crawler.nearest, NodeHeap)
-		assert len(crawler.nearest) == 0
+		assert not crawler.nearest
 
 	@pytest.mark.skip(reason="not implemented")
 	def test_find_returns_expected_result(self, mknode):
 		crawler = fake_spider_crawler(node=mknode())
-		assert len(crawler.last_ids_crawled) == 0
+		assert not crawler.last_ids_crawled
 		crawler.nearest.push([mknode(intid=i) for i in range(5)])
