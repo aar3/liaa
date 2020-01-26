@@ -4,10 +4,52 @@ import random
 import pytest
 
 from liaa import MAX_LONG
-from liaa.routing import KBucket, TableTraverser, RoutingTable
-from liaa.network import KademliaProtocol
+from liaa.routing import KBucket, TableTraverser, RoutingTable, LRUCache
+from liaa.server import KademliaProtocol
 from liaa.utils import rand_str, join_addr
 
+
+
+class TestLRUCache:
+	# pylint: disable=no-self-use
+	def can_instantiate(self):
+		cache = LRUCache(maxsize=10)
+		assert isinstance(cache, LRUCache)
+		assert cache.maxsize == 10
+
+	def test_can_add_item(self):
+		cache = LRUCache(maxsize=10)
+		items = [(x, str(x)) for x in range(5)]
+		for key, val in items:
+			cache[key] = val
+		assert len(cache) == 5
+
+	def test_add(self, mklru):
+		cache = mklru()
+		cache.add(5, '5')
+		assert len(cache) == 6
+		assert 5 in cache
+
+	def test_add_head(self, mklru):
+		cache = mklru()
+		cache.add_head(-1, '-1')
+		assert len(cache) == 6
+		node = cache.items[-1]
+
+		assert not node.prev
+		assert node.next.key == 0 and node.next.val == '0'
+
+	def test_remove(self, mklru):
+		cache = mklru()
+		cache.remove(3)
+
+		assert len(cache) == 4
+		assert 3 not in cache.items
+
+	def test_pop(self, mklru):
+		cache = mklru()
+		key, val = cache.pop()
+		assert key == 4 and val == '4'
 
 class TestKBucket:
 	# pylint: disable=no-self-use
@@ -69,7 +111,6 @@ class TestKBucket:
 		for node in nodes:
 			bucket.add_node(node)
 
-		print(bucket.get_nodes())
 
 		random.shuffle(nodes)
 		for node in nodes:

@@ -17,7 +17,7 @@ import time
 import sys
 import getopt
 
-from liaa.network import Server
+from liaa.server import Server
 from liaa.node import ResourceNode, PeerNode
 from liaa.utils import rand_str, split_addr, load_ssl
 

@@ -21,7 +21,7 @@ import asyncio
 import random
 import threading
 
-from liaa.network import Server
+from liaa.server import Server
 from liaa.utils import rand_str, load_ssl
 from liaa.node import ResourceNode, PeerNode
 

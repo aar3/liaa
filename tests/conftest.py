@@ -7,10 +7,10 @@ import umsgpack
 import pytest
 
 from liaa import MAX_LONG
-from liaa.network import Server
+from liaa.server import Server
 from liaa.node import Node, PeerNode, ResourceNode
 from liaa.protocol import KademliaProtocol, Header
-from liaa.routing import RoutingTable, KBucket
+from liaa.routing import RoutingTable, KBucket, LRUCache
 from liaa.storage import StorageIface
 from liaa.utils import rand_str
 
@@ -36,6 +36,17 @@ def mkpeer():
 		key = key or f"127.0.0.1:{random.randint(1000, 9000)}"
 		return PeerNode(key)
 	return _mkpeer
+
+
+@pytest.fixture()
+def mklru():
+	def _mklru(maxsize=10):
+		cache = LRUCache(maxsize=maxsize)
+		items = [(x, str(x)) for x in range(5)]
+		for key, val in items:
+			cache[key] = val
+		return cache
+	return _mklru
 
 
 @pytest.fixture()
