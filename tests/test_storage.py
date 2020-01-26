@@ -6,11 +6,11 @@ from liaa.storage import EphemeralStorage, DiskStorage
 
 class TestEphemeralStorage:
 	# pylint: disable=no-self-use
-	def test_can_instantiate_storage(self, mkpeer):
+	def test_can_instantiate(self, mkpeer):
 		storage = EphemeralStorage(mkpeer(), 10)
 		assert isinstance(storage, EphemeralStorage)
 
-	def test_can_set_and_get(self, mkpeer, mkresource):
+	def test_set_and_get(self, mkpeer, mkresource):
 		storage = EphemeralStorage(mkpeer(), 10)
 		resource = mkresource(key="one", value=b"two")
 		storage.set(resource)
@@ -18,8 +18,7 @@ class TestEphemeralStorage:
 		node = storage.get(resource.key)
 		assert  node.value == b"two"
 
-	def test_resource_expires_per_expiry(self, mkpeer, mkresource):
-		# Expiry time of 0 should force the prune to make all items stale immediately
+	def test_storage_ttl(self, mkpeer, mkresource):
 		storage = EphemeralStorage(mkpeer(), 0)
 		resource = mkresource(key="one", value=b"two")
 		storage.set(resource)
@@ -33,14 +32,14 @@ class TestEphemeralStorage:
 			assert node.key == resource.key
 			assert node.value == resource.value
 
-	def test_iter_older_than_returns_proper_keys_for_republishing(self, mkpeer, mkresource):
-		storage = EphemeralStorage(mkpeer(), 0)
-		resources = [mkresource(), mkresource()]
+	def test_iter_older_than(self, mkpeer, mkresource):
+		storage = EphemeralStorage(mkpeer(), 5)
+		resources = [mkresource() for _ in range(3)]
 
 		for node in resources:
 			storage.set(node)
 
-		for key, value in storage.iter_older_than(0):
+		for key, value in storage.iter_older_than(3):
 			node = mkresource(key, value)
 			assert node in resources
 
@@ -57,7 +56,6 @@ class TestDiskStorage:
 	def test_store_contents(self, mkpeer, mkresource):
 		node = mkpeer()
 		storage = DiskStorage(node)
-
 		resource = mkresource()
 		storage.set(resource)
 
@@ -67,7 +65,6 @@ class TestDiskStorage:
 	def test_storage_remove(self, mkpeer, mkresource):
 		node = mkpeer()
 		storage = DiskStorage(node)
-
 		resource = mkresource()
 		storage.set(resource)
 
@@ -76,31 +73,26 @@ class TestDiskStorage:
 		storage.remove(resource.key)
 		assert len(storage) == 0
 
-	def test_load_data_returns_proper_payload(self, mkpeer, mkresource):
-		node = mkpeer()
-		storage = DiskStorage(node)
-
+	def test_load_data(self, mkpeer, mkresource):
+		storage = DiskStorage(mkpeer())
 		resource = mkresource()
 		storage.set(resource)
 
 		# pylint: disable=protected-access
-		data = storage._load_data(resource.key)
-		assert resource.value == data
+		(bday, value) = storage._load_data(resource.key)
+		assert resource.value == value
+		assert isinstance(bday, float)
 
 	def test_persist_dir_exists(self, mkpeer):
-		node = mkpeer()
-		storage = DiskStorage(node)
+		storage = DiskStorage(mkpeer())
 
 		assert os.path.exists(storage.dir)
 		assert os.path.exists(storage.content_dir)
 
-	def test_can_set_and_retrieve_basic_resource(self, mkpeer, mkresource):
-		node = mkpeer()
-		storage = DiskStorage(node)
+	def test_set_and_get(self, mkpeer, mkresource):
+		storage = DiskStorage(mkpeer())
 		resource = mkresource()
-
 		storage.set(resource)
-
 		result = storage.get(resource.key)
 		assert result == resource
 
@@ -108,17 +100,14 @@ class TestDiskStorage:
 	def test_prune_removes_old_data(self, mkpeer, mkresource):
 
 		ttl = 3
-		node = mkpeer()
-		storage = DiskStorage(node, ttl=ttl)
-
+		storage = DiskStorage(mkpeer(), ttl=ttl)
 		resources = [mkresource() for _ in range(3)]
-
 		storage.set(resources[0])
 
 		time.sleep(ttl + 2)
+		storage.prune()
 
 		storage.set(resources[1])
-
 		assert len(storage) == 1
 
 		for node in storage:

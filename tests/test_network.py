@@ -10,13 +10,13 @@ class TestServer:
 	loop = asyncio.get_event_loop()
 
 	# pylint: disable=no-self-use
-	def test_server_instance_is_ok(self):
+	def test_can_instantiate(self):
 		server = Server("0.0.0.0", 8000)
 		assert isinstance(server, Server)
 		assert server.node.ip == "0.0.0.0"
 		assert server.node.port == 8000
 
-	def test_server_can_start_and_stop(self, mkserver):
+	def test_can_start_and_stop(self, mkserver):
 		server = mkserver()
 
 		assert not server.udp_transport
@@ -35,12 +35,10 @@ class TestServer:
 
 		server.stop()
 
-		# assert server.udp_transport.closed()
 		assert server.refresh_loop.cancelled()
 		assert server.save_state_loop.cancelled()
-		# assert not server.listener.is_serving()
 
-	def test_create_protocol_is_interchangeable(self, mkserver):
+	def test_protocol_change(self, mkserver):
 		server = mkserver()
 		# pylint: disable=protected-access
 		proto = server._create_protocol()
@@ -55,7 +53,7 @@ class TestServer:
 		assert isinstance(husk_server._create_protocol(), CoconutProtocol)
 
 
-	def test_set_digest_returns_void_when_node_has_no_neighbors(self, mkserver, mkresource):
+	def test_set_digest_with_no_neighbors(self, mkserver, mkresource):
 		server = mkserver()
 		node = mkresource()
 		# pylint: disable=protected-access
@@ -63,7 +61,7 @@ class TestServer:
 		result = self.loop.run_until_complete(server.set_digest(node))
 		assert not result
 
-	def test_save_state_saves(self, sandbox, mkserver, mkpeer):
+	def test_save_state(self, sandbox, mkserver, mkpeer):
 		server = mkserver()
 
 		# pylint: disable=unused-argument,bad-continuation
@@ -81,7 +79,7 @@ class TestServer:
 
 		box.restore()
 
-	def test_can_load_state(self, mkserver, sandbox, mkpeer):
+	def test_load_state(self, mkserver, sandbox, mkpeer):
 		server = mkserver()
 		asyncio.set_event_loop(asyncio.new_event_loop())
 

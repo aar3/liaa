@@ -1,7 +1,7 @@
 import sys
 import os
 
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 
 WORKDIR = os.path.basename(os.path.basename(os.path.abspath(__file__)))
 if not WORKDIR in sys.path:

@@ -152,7 +152,7 @@ def load_ssl(cert, key):
 	"""
 	Create and return an SSL context used for examples/tests/debugging
 	"""
-	if not os.path.exists(cert) or not os.path.exists(key):
+	if (not cert and not key) or (not os.path.exists(cert) or not os.path.exists(key)):
 		return None
 	ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
 	ssl_ctx.load_cert_chain(cert, key)

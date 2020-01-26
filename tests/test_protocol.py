@@ -136,6 +136,7 @@ class TestHttpInterface:
 
 class TestKademliaProtocol:
 	# pylint: disable=no-self-use
+
 	def test_can_instantiate(self, mkpeer):
 		node = mkpeer()
 		proto = KademliaProtocol(node, storage=EphemeralStorage(node), ksize=20)
@@ -266,7 +267,7 @@ class TestKademliaProtocol:
 
 		assert len(proto.storage) == 3
 
-		prevsize = proto.router.num_nodes()
+		prevsize = proto.router.total_nodes()
 
 		# add a new node that should have neighbors
 		newnode = mkpeer()
@@ -274,7 +275,7 @@ class TestKademliaProtocol:
 		result = proto.welcome_if_new(proto, newnode)
 
 		assert not result
-		assert proto.router.num_nodes() == prevsize + 1
+		assert proto.router.total_nodes() == prevsize + 1
 
 	def test_welcome_if_new_calls_store(self, fake_proto, mkpeer, sandbox, mkresource):
 		proto = fake_proto()
@@ -304,13 +305,13 @@ class TestKademliaProtocol:
 		# a new peer should have no neighbors and call_store should be called
 		newnode = mkpeer()
 		box.stub('welcome_if_new', welcome_if_new_stub)
-		prevsize = proto.router.num_nodes()
+		prevsize = proto.router.total_nodes()
 		(retnode, storekey, storeval) = proto.welcome_if_new(proto, newnode)
 
 		assert retnode == newnode
 		assert storekey == resources[0].key
 		assert storeval == resources[0].value
-		assert proto.router.num_nodes() == prevsize + 1
+		assert proto.router.total_nodes() == prevsize + 1
 
 	def test_rpc_find_node_returns_neighbors(self, mknode, fake_proto, mkpeer):
 		proto = fake_proto()
