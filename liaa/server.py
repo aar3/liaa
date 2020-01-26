@@ -3,7 +3,8 @@ import logging
 import os
 import pickle
 
-from liaa.crawling import NodeSpiderCrawl, ValueSpiderCrawl
+from liaa import __version__
+from liaa.crawler import NodeSpiderCrawl, ValueSpiderCrawl
 from liaa.node import Node, PeerNode, ResourceNode
 from liaa.protocol import KademliaProtocol, HttpInterface
 from liaa.storage import StorageIface
@@ -163,7 +164,8 @@ class Server:
 
 		await asyncio.gather(*results)
 
-		for node in self.storage.iter_older_than(3600):
+		for data in self.storage.iter_older_than(20):
+			node = ResourceNode(*data)
 			log.debug("%s republishing node %s from store", self.node, node)
 			await self.set_digest(node)
 
@@ -198,7 +200,7 @@ class Server:
 		Returns
 		-------
 			asyncio.Future:
-				scheduled callback for a NodeSpiderCrawl to continue crawling
+				scheduled callback for a NodeSpiderCrawl to continue crawler
 				network in order to find peers for self.node
 		"""
 		log.debug("%s attempting to bootstrap with contacts: %s", self.node, addrs)
