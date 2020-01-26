@@ -1,7 +1,5 @@
 import logging
 from collections import Counter
-import asyncio
-from typing import List, Any, Dict
 
 from liaa.node import NodeHeap
 from liaa.protocol import RPCFindResponse
@@ -12,14 +10,7 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # pylint: disable=too-few-public-methods
 class SpiderCrawl:
-	# pylint: disable=bad-continuation
-	def __init__(self,
-		protocol: "KademliaProtocol",
-		node: "Node",
-		peers: List["Node"],
-		ksize: int,
-		alpha: int
-	):
+	def __init__(self, protocol, node, peers, ksize, alpha):
 		"""
 		The C{SpiderCrawl}er is a base class that is responsible for bootstrapping
 		various sub-classes (sub-crawlers) with a list of necessary functions,
@@ -48,7 +39,7 @@ class SpiderCrawl:
 
 		log.info("%s creating spider with %i peers", self.node, len(peers))
 
-	async def _find(self, rpcmethod: asyncio.Future) -> asyncio.Future:
+	async def _find(self, rpcmethod):
 		"""
 		Make a either a call_find_value or call_find_node rpc to our nearest
 		neighbors in attempt to find some node
@@ -101,13 +92,7 @@ class SpiderCrawl:
 
 class ValueSpiderCrawl(SpiderCrawl):
 	# pylint: disable=bad-continuation
-	def __init__(self,
-		protocol: "KademliaProtocol",
-		node: "ResourceNode",
-		peers: List["Node"],
-		ksize: int,
-		alpha: int
-	):
+	def __init__(self, protocol, node, peers, ksize, alpha):
 		"""
 		The C{ValueCrawl}er is basically responsible for executing recursive calls
 		to our _find method, which searches our nearest nodes (and the nearest nodes
@@ -149,7 +134,7 @@ class ValueSpiderCrawl(SpiderCrawl):
 		"""
 		return await self._find(self.protocol.call_find_value)
 
-	async def _nodes_found(self, responses: Dict[str, Any]):
+	async def _nodes_found(self, responses):
 		"""
 		Recursively execute a _find and handle all returned values. These values
 		can be nodes representing closer nodes to our eventual destination as well
@@ -209,7 +194,7 @@ class ValueSpiderCrawl(SpiderCrawl):
 		# or from have_contacted_all
 		return await self.find()
 
-	async def _handle_found_values(self, values: List[str]):
+	async def _handle_found_values(self, values):
 		"""
 		We got some values!  Exciting.  But let's make sure they're all the
 		same or freak out a little bit.  Also, make sure we tell the nearest
@@ -257,7 +242,7 @@ class NodeSpiderCrawl(SpiderCrawl):
 		"""
 		return await self._find(self.protocol.call_find_node)
 
-	async def _nodes_found(self, responses: List[Any]) -> asyncio.Future:
+	async def _nodes_found(self, responses):
 		"""
 		Handle the result of an iteration in _find.
 

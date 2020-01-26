@@ -10,10 +10,7 @@
 # we can create as many peer's as we want, with each peer generating its own
 # resources, and interacting with the network autonomously, so that we can ensure
 # that the network works as expected, at scale
-#
-# Example
-# -------
-# python examples/multi_peer_simulator.py
+
 
 # pylint: disable=wrong-import-order,unused-import
 import env
@@ -25,11 +22,10 @@ import random
 import threading
 
 from liaa.network import Server
-from liaa.utils import rand_str, debug_ssl_ctx
+from liaa.utils import rand_str, load_ssl
 from liaa.node import ResourceNode, PeerNode
 
 # pylint: disable=invalid-name
-
 host = "127.0.0.1"
 num_peers = 4  # minimum of 4
 start_port = 8000
@@ -74,7 +70,6 @@ def main():
 		ksize = random.randint(14, 20)
 		alpha = random.randint(2, 6)
 		server = Server("0.0.0.0", ports[i], ksize=ksize, alpha=alpha)
-		server.ssl_ctx = debug_ssl_ctx(server.storage.root_dir)
 		servers.append(server)
 
 	for server in servers:

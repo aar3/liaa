@@ -32,3 +32,7 @@
    - [technical] verify crawling implementation and add tests
 ### 1.12.19
    - [enhancement] continue adding tests and dostctrings
+   - [enhancement] add quantitative network analyses to confirm implementation
+   - [enhancement] add various features of the paper
+      - swap getopt parser for argeparse
+      - swap ordereddict kbucket node cache for LRU cache

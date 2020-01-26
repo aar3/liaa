@@ -6,47 +6,21 @@
 #
 # The idea is that we open a few terminal tabs, and run this program using a few
 # different ports, in order to ensure that the network is behaving as expected
-#
-# Example
-# -------
-# 	In terminal tab #1
-# 		- python examples/simple_peer.py -p 8000
-#
-# 	In terminal tab #2
-# 		- python examples/multi_peer_set.py -p 8001 -n 127.0.0.1:8000
-#
-# 	In terminal tab #3
-# 		- python examples/multi_peer_set.py -p 8002 -n 127.0.0.1:8001
+
 
 # pylint: disable=wrong-import-order,unused-import
 import env
 import logging
 import asyncio
+import argparse
 import time
 import sys
 import getopt
 
 from liaa.network import Server
 from liaa.node import ResourceNode, PeerNode
-# pylint: disable=bad-continuation
-from liaa.utils import (
-	rand_str,
-	split_addr,
-	ArgsParser,
-	str_arg_to_bool,
-	debug_ssl_ctx
-)
+from liaa.utils import rand_str, split_addr, load_ssl
 
-
-def usage():
-	return """
-Usage: python multi_peer_set.py -p [port] -n [bootstrap neighbors]
--p --port
-	Port on which to listen (e.g., 8000)
--n --neighbors
-	Neighbors with which to bootstrap (e.g., 177.91.19.1:8000,178.31.13.21:9876)
-		or 'False' if not passing an args
-	"""
 
 async def make_fake_data(server):
 	while True:
@@ -66,30 +40,26 @@ def main():
 
 	loop = asyncio.get_event_loop()
 
-	parser = ArgsParser()
 
-	try:
-		args = "p:n:"
-		long_args = ["--port", "--neighbors="]
-		opts, args = getopt.getopt(sys.argv[1:], args, long_args)
-		parser.add_many(opts)
-	except getopt.GetoptError as err:
-		log.error("GetoptError: %s", err)
-		print(usage())
-		sys.exit(1)
+	parser = argparse.ArgumentParser(description='Run a single peer in the network')
+	parser.add_argument('-p', '--port', help='Port to bind interfaces', required=True)
+	parser.add_argument('-n', '--neighbors', nargs='+', help='Neighbors to boostrap with')
+	parser.add_argument('-c', '--cert', help='Certificate for TLS')
+	parser.add_argument('-k', '--key', help='Private key for TLS')
+	args = vars(parser.parse_args())
 
-	if parser.has_help_opt() or not parser.has_proper_opts():
-		print(usage())
-		sys.exit(1)
+	port = args.get('p') or args.get('port')
+	bootstrap_peers = (args.get('neighbors') or args.get('n')) or []
+	key = args.get('k') or args.get('key')
+	cert = args.get('c') or args.get('cert')
 
-	server = Server("0.0.0.0", int(parser.get("-p", "--port")))
-	server.ssl_ctx = debug_ssl_ctx(server.storage.root_dir)
+	server = Server("0.0.0.0", port)
+	server.ssl_ctx = load_ssl(cert, key)
 
 	loop.run_until_complete(server.listen())
 
-	bootstrap_peers = str_arg_to_bool(parser.get("-n", "--neighbors"))
+
 	if bootstrap_peers:
-		bootstrap_peers = bootstrap_peers.split(",")
 		loop.run_until_complete(server.bootstrap(list(map(split_addr, bootstrap_peers))))
 
 	try:
