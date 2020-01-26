@@ -35,3 +35,4 @@
    - [enhancement] add quantitative network analyses to confirm implementation
    - [enhancement] add various features of the paper
       - swap getopt parser for argeparse
+      - swap ordereddict kbucket node cache for LRU cache

@@ -1,24 +1,28 @@
 import heapq
 import time
+import logging
 import operator
 import asyncio
 
 from itertools import chain
-from collections import OrderedDict
 
 from liaa import MAX_LONG
 from liaa.utils import shared_prefix, bytes_to_bit_string
 
 
+log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+
 class ListNode:
 	# pylint: disable=redefined-builtin,too-few-public-methods
-	def __init__(self, val, prev=None, next=None):
+	def __init__(self, key, val, prev=None, next=None):
+		self.key = key
 		self.val = val
 		self.prev = prev
 		self.next = next
 
 	def __str__(self):
-		return str((self.prev, self.val, self.next))
+		return str((self.prev, self.key, self.val, self.next))
 
 
 class DoubleLinkedList:
@@ -26,6 +30,16 @@ class DoubleLinkedList:
 		self.head = None
 		self.tail = None
 		self._len = 0
+
+	def add_head(self, node):
+		if not self.head:
+			self.head = node
+			self.tail = node
+		else:
+			node.next = self.head
+			self.head.prev = node
+			self.head = node
+		self._len += 1
 
 	def add(self, node):
 		if not self.head:
@@ -51,7 +65,6 @@ class DoubleLinkedList:
 		else:
 			node.next.prev = node.prev
 			node.prev = node.next
-
 		self._len -= 1
 
 	def __len__(self):
@@ -65,43 +78,102 @@ class DoubleLinkedList:
 			curr = curr.next
 		return items
 
-
-class LRSCache:
-	def __init__(self, maxsize):
+	def pop(self):
 		"""
-		Manual implementation of a least recently seen cache where the tail
-		of the DoubleLinkedList is the latest seen node
+		Section 4.1
 
-		(Not currently used, using basic Python dict)
+		This pop implementation is used to remove tail elements
+		(i.e., the most recently seen items) from k-bucket replacement node
+		cache, and add them to k-bucket regular node cache
+		"""
+		if not self.tail:
+			return False
+
+		if self.tail == self.head:
+			node = self.tail
+			self.tail = self.head = None
+			return node
+
+		self.tail.prev.next = None
+		node = self.tail
+		self.tail = node.prev
+		return node
+
+
+class LRUCache:
+	def __init__(self, maxsize=10e5):
+		"""
+		Alternative implementation of a least recently used cache where the tail
+		of the linked list is the latest seen node, and we only insert
+		elements at the head
 		"""
 		self.list = DoubleLinkedList()
 		self.maxsize = maxsize
-		self.cache = {}
+		self.items = {}
 
-	def add(self, val):
-		if val in self.cache:
-			self.remove(val)
-		node = ListNode(val)
-		self.cache[val] = node
+	def add(self, key, value):
+		if len(self) == self.maxsize:
+			raise RuntimeError('LRUCache has exceeded maxsize=%i' % self.maxsize)
+		if key in self.items:
+			self.remove(key)
+		node = ListNode(key, value)
+		self.items[key] = node
 		self.list.add(node)
 
-	def remove(self, val):
-		if not val in self.cache:
+	def add_head(self, key, value):
+		"""
+		Section 2.2
+
+		Specific implementation for adding a new node to the head
+		of the linked linked list cache. We don't check for removal
+		because this will be a node we haven't seen
+		"""
+		if len(self) == self.maxsize:
+			log.error('LRUCache has exceeded maxsize=%i', self.maxsize)
 			return False
-		node = self.cache[val]
-		del self.cache[val]
+		node = ListNode(key, value)
+		self.items[key] = node
+		self.list.add_head(node)
+		return True
+
+	def remove(self, key):
+		if not key in self.items:
+			raise KeyError("Key %s does not exist in cache" % key)
+		node = self.items[key]
+		del self.items[key]
 		self.list.remove(node)
-		return None
+
+	def pop(self):
+		node = self.list.pop()
+		if node:
+			del self.items[node.key]
+			return node.key, node.val
+		raise ValueError("Could not pop from list")
+
+	def __getitem__(self, key):
+		if not key in self:
+			raise KeyError("%s does not exist in cache" % key)
+		node = self.items[key]
+		return node.key, node.val
+
+	def __setitem__(self, key, value):
+		self.add(key, value)
+
+	def __contains__(self, key):
+		return key in self.items
+
+	def __delitem__(self, key):
+		self.remove(key)
 
 	def __len__(self):
-		return len(self.cache)
+		return len(self.items)
 
 
 class KBucket:
 	def __init__(self, lower_bound, upper_bound, ksize):
 		self.range = (lower_bound, upper_bound)
-		self.nodes = OrderedDict()
-		self.replacement_nodes = OrderedDict()
+		self.nodes = LRUCache()
+		self.replacement_nodes = LRUCache()
 		self.set_last_seen()
 		self.ksize = ksize
 
@@ -109,10 +181,20 @@ class KBucket:
 		self.last_seen = time.monotonic()
 
 	def get_nodes(self):
-		return list(self.nodes.values())
+		listnodes = list(self.nodes.items.values())
+		return [node.val for node in listnodes]
 
 	def get_replacement_nodes(self):
-		return list(self.replacement_nodes.values())
+		"""
+		Section 4.1
+
+		When we call_ping on head nodes in order to keep our LRU nodes
+		fresh, if the head continues to respond, instead of throwing away
+		the new node, we add its a replacement cache
+		"""
+		listnodes = list(self.replacement_nodes.items.values())
+		return [node.val for node in listnodes]
+
 
 	def split(self):
 		midpoint = (self.range[0] + self.range[1]) / 2
@@ -133,7 +215,7 @@ class KBucket:
 			del self.nodes[node.key]
 
 			if self.replacement_nodes:
-				newnode_id, newnode = self.replacement_nodes.popitem()
+				newnode_id, newnode = self.replacement_nodes.pop()
 				self.nodes[newnode_id] = newnode
 
 	def add_node(self, node):
@@ -157,11 +239,12 @@ class KBucket:
 
 		if node.key in self.replacement_nodes:
 			del self.replacement_nodes[node.key]
+
 		self.replacement_nodes[node.key] = node
 		return False
 
 	def depth(self):
-		vals = self.nodes.values()
+		vals = self.nodes.items.values()
 		sprefix = shared_prefix([bytes_to_bit_string(n.digest) for n in vals])
 		return len(sprefix)
 
@@ -169,7 +252,7 @@ class KBucket:
 		return len(self) == self.ksize
 
 	def head(self):
-		return list(self.nodes.values())[0]
+		return list(self.nodes.items.values())[0]
 
 	def has_in_range(self, node):
 		return self.range[0] <= node.long_id <= self.range[1]
@@ -181,7 +264,7 @@ class KBucket:
 		return len(self.get_nodes()) + len(self.get_replacement_nodes())
 
 	def __getitem__(self, node_id):
-		return self.nodes.get(node_id, None)
+		return self.nodes.items.get(node_id, None)
 
 	def __len__(self):
 		return len(self.nodes)
@@ -230,7 +313,6 @@ class RoutingTable:
 		"""
 		self.node = node
 		self.protocol = protocol
-		self.cache = LRSCache(maxsize=20)
 		self.ksize = ksize
 		self.maxlong = maxlong or MAX_LONG
 		self.flush()
@@ -304,9 +386,8 @@ class RoutingTable:
 		if bucket.is_full():
 			result = asyncio.ensure_future(self.protocol.call_ping(bucket.head()))
 			if not result:
-				items = bucket.nodes.items()
-				items[0] = (node.key, node)
-				bucket.nodes = dict(zip(items))
+				bucket.nodes.remove(bucket.head().key)
+				bucket.nodes.add_head(node.key, node)
 		return None
 
 

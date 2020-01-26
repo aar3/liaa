@@ -59,7 +59,7 @@ def main():
 	loop.run_until_complete(server.listen())
 
 
-	if bootstrap_peers :
+	if bootstrap_peers:
 		loop.run_until_complete(server.bootstrap(list(map(split_addr, bootstrap_peers))))
 
 	try:

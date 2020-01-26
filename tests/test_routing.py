@@ -51,27 +51,26 @@ class TestKBucket:
 		assert bucket.get_nodes() == nodes[:k]
 		assert bucket.get_replacement_nodes() == nodes[k:]
 
-	def test_remove_replaces_with_replacement(self, mkpeer):
-		k = 3
-		bucket = KBucket(0, 10, k)
-		nodes = [mkpeer() for x in range(10)]
+	def test_remove_replaces_with_replacement(self, mknode):
+		bucket = KBucket(0, 10, 3)
+		nodes = [mknode() for x in range(10)]
 		for node in nodes:
 			bucket.add_node(node)
+		assert len(bucket.replacement_nodes) == 7
 
-		# here we remove a node that's in the bucket, and assert that a
-		# our latest replacement node (nodes[-1:]) was added to the bucket
+		replacements = bucket.get_replacement_nodes()
 		bucket.remove_node(nodes.pop(0))
-		assert bucket.get_nodes() == nodes[:k-1] + nodes[-1:]
-		assert bucket.get_replacement_nodes() == nodes[k-1:-1]
+		assert len(bucket.get_replacement_nodes()) == 6
+		assert replacements[-1] in bucket.get_nodes()
 
-	def test_remove_all_nodes_uninitializes_bucket(self, mkpeer):
-		k = 3
-		bucket = KBucket(0, 10, k)
-		nodes = [mkpeer() for x in range(10)]
+	def test_remove_all_nodes_uninitializes_bucket(self, mknode):
+		bucket = KBucket(0, 10, 3)
+		nodes = [mknode() for x in range(10)]
 		for node in nodes:
 			bucket.add_node(node)
 
-		# remove all nodes
+		print(bucket.get_nodes())
+
 		random.shuffle(nodes)
 		for node in nodes:
 			bucket.remove_node(node)
