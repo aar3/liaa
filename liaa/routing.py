@@ -259,6 +259,10 @@ class KBucket:
 	def total_nodes(self):
 		return len(self.get_nodes()) + len(self.get_replacement_nodes())
 
+	def __iter__(self):
+		for node in chain(self.get_nodes(), self.get_replacement_nodes()):
+			yield node
+
 	def __getitem__(self, node_id):
 		return self.nodes.items.get(node_id, None)
 
@@ -417,3 +421,7 @@ class RoutingTable:
 
 	def total_nodes(self):
 		return sum([b.total_nodes() for b in self.buckets])
+
+	def __iter__(self):
+		for bucket in self.buckets:
+			yield bucket

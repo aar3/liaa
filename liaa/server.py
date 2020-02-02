@@ -52,6 +52,14 @@ class Server:
 		self._ssl_ctx = None
 
 	@property
+	def host(self):
+		return self.node.ip
+
+	@property
+	def port(self):
+		return self.node.port
+
+	@property
 	def ssl_ctx(self):
 		"""
 		Returns
@@ -336,7 +344,8 @@ class Server:
 			'ksize': self.ksize,
 			'alpha': self.alpha,
 			'id': self.node.key,
-			'neighbors': self.bootstrappable_neighbors()
+			'neighbors': self.bootstrappable_neighbors(),
+			'router': self._export_router(),
 		}
 
 		if not data['neighbors']:
@@ -397,3 +406,24 @@ class Server:
 												self.save_state_regularly,
 												fname,
 												frequency)
+
+	def _export_router(self):
+		"""
+		Export all buckets and nodes from the router, for network analyses
+
+		(For analyses only - not used in the app/protocol)
+
+		Returns
+		-------
+			Dict[int, Dict[int, str]]
+		"""
+		if not self.protocol:
+			log.warning("server has no protocol, not exporting router")
+			return {}
+		router_items = {}
+		for i, bucket in enumerate(self.protocol.router):
+			bucketdata = {}
+			for j, node in enumerate(bucket):
+				bucketdata[j] = str(node)
+			router_items[i] = (bucket.last_seen, bucket)
+		return router_items

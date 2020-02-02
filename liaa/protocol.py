@@ -295,6 +295,7 @@ class HttpInterface(asyncio.Protocol):
 		self.source_node = source_node
 		self.storage = storage
 		self.wait = wait
+		self._data = None
 		self.transport = None
 
 	def connection_made(self, transport):
@@ -333,7 +334,7 @@ class HttpInterface(asyncio.Protocol):
 		rawheaders, rawbody = data.split("\r\n\r\n")
 		unmarshalled = json.loads(rawbody)
 
-		log.debug("Received new http message %s", data)
+		log.debug("received new http message sized %iB", len(buff))
 
 		if rawheaders.startswith("GET"):
 			response = self.fetch_data(unmarshalled.get("key"))

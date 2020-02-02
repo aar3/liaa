@@ -1,1 +1,2 @@
 u-msgpack-python
+chardet

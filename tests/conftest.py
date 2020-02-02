@@ -123,7 +123,10 @@ def mkserver():
 	def _mkserver(iface=None, port=None, ksize=None, alpha=None):
 		iface = iface or "0.0.0.0"
 		port = port or 8000
-		return Server(iface, port)
+		srv = Server(iface, port)
+		# pylint: disable=protected-access
+		srv._create_protocol()
+		return srv
 	return _mkserver
 
 

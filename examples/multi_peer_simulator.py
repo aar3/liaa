@@ -18,17 +18,21 @@ import os
 import sys
 import logging
 import asyncio
+import json
 import random
 import threading
+import subprocess
 
+from liaa import __version__
 from liaa.server import Server
-from liaa.utils import rand_str, load_ssl
+from liaa.utils import rand_str, load_ssl, join_addr
 from liaa.node import ResourceNode, PeerNode
 
 # pylint: disable=invalid-name
 host = "127.0.0.1"
 num_peers = 4  # minimum of 4
 start_port = 8000
+resource_pool = []
 
 
 handler = logging.StreamHandler()
@@ -39,12 +43,31 @@ log.addHandler(handler)
 log.setLevel(logging.DEBUG)
 
 
-async def make_fake_data(server):
+async def make_data(server, pool):
+	"""
+	Create a random resource and add it to a resource pool so that it can
+	be chosen at random later, to be fetched
+	"""
 	while True:
 		node = ResourceNode(key=rand_str(), value=rand_str().encode())
 		await server.set(node)
+		pool.append(node)
 		await asyncio.sleep(5)
 
+
+async def make_fetch(myport, pool):
+	"""
+	Immitate a GET request to a peer's http interface
+	"""
+	iters = 0
+	while True:
+		if not iters % 5:
+			rando = random.choice(pool)
+			data = json.dumps({"key": rando.key})
+			parts = ["curl", "-X", "GET", f"http://127.0.0.1:{myport}", "-d", data]
+			proc = subprocess.Popen(parts, stderr=sys.stderr, stdout=sys.stderr)
+		await asyncio.sleep(2)
+		iters += 1
 
 def run_server(loop, server, neighbor_ports):
 	"""
@@ -55,7 +78,8 @@ def run_server(loop, server, neighbor_ports):
 
 	bootstrap_peers = [(host, p) for p in neighbor_ports]
 	loop.create_task(server.bootstrap(bootstrap_peers))
-	loop.create_task(make_fake_data(server))
+	loop.create_task(make_data(server, resource_pool))
+	loop.create_task(make_fetch(server.port, resource_pool))
 	loop.run_forever()
 
 
