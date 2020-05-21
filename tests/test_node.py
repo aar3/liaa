@@ -6,23 +6,20 @@ from liaa.utils import hex_to_int, pack
 class TestNode:
 	# pylint: disable=no-self-use
 	def test_peer_node(self):
-		node = PeerNode(key='127.0.0.1:8080')
+		node = PeerNode(key="127.0.0.1:8080")
 		assert isinstance(node, PeerNode)
 		assert node.ip == "127.0.0.1"
 		assert node.port == 8080
-		assert node.node_type == 'peer'
-		assert not node.value
 		assert node.digest == pack(node.key)
 		assert node.long_id < MAX_LONG
-		assert str(node) == "peer@127.0.0.1:8080"
+		assert str(node) == "PeerNode@127.0.0.1:8080"
 
 	def test_resource_node(self):
-		node = ResourceNode(key='my-node', value=b'123')
+		node = ResourceNode(key="my-node", value=b"123")
 		assert isinstance(node, ResourceNode)
-		assert node.node_type == 'resource'
 		assert node.digest == pack(node.key)
 		assert node.long_id < MAX_LONG
-		assert str(node) == 'resource@my-node'
+		assert str(node) == "ResourceNode@my-node"
 
 	def test_distance_calculation(self, mkpeer):
 
@@ -56,7 +53,7 @@ class TestNodeHeap:
 		heap = NodeHeap(mkpeer(), 3)
 		nodes = [mkpeer() for _ in range(3)]
 		for node in nodes:
-			heap.push(node)
+			heap.push([node])
 		node = heap.get_node(nodes[0].key)
 		assert isinstance(node, Node)
 
@@ -70,7 +67,7 @@ class TestNodeHeap:
 		heap = NodeHeap(mkpeer(), maxsize)
 		nodes = [mkpeer() for _ in range(maxsize)]
 		for node in nodes:
-			heap.push(node)
+			heap.push([node])
 		contacted = nodes[:5]
 		for node in contacted:
 			heap.mark_contacted(node)
@@ -84,7 +81,7 @@ class TestNodeHeap:
 		heap = NodeHeap(mkpeer(), maxsize)
 		nodes = [mkpeer() for _ in range(maxsize)]
 		for node in nodes:
-			heap.push(node)
+			heap.push([node])
 
 		popped = heap.popleft()
 		assert isinstance(popped, Node)
@@ -94,7 +91,7 @@ class TestNodeHeap:
 		heap = NodeHeap(mkpeer(), maxsize)
 		nodes = [mkpeer()]
 		for node in nodes:
-			heap.push(node)
+			heap.push([node])
 
 		heap.remove(nodes)
 
@@ -103,20 +100,20 @@ class TestNodeHeap:
 
 	def test_heap_overload_doesnt_exceed_maxsize(self, mkpeer):
 		maxsize = 3
-		node = NodeHeap(mkpeer(), maxsize)
-		assert not node
+		heap = NodeHeap(mkpeer(), maxsize)
+		assert not heap
 
 		for _ in range(10):
-			node.push(mkpeer())
+			heap.push([mkpeer()])
 
-		assert len(node) == maxsize
-		assert len(list(node)) == maxsize
+		assert len(heap) == maxsize
+		assert len(list(heap)) == maxsize
 
 	def test_heap_iters_over_nsmallest_via_distance(self, mkpeer):
 		heap = NodeHeap(mkpeer(), 5)
 		nodes = [mkpeer() for _ in range(10)]
 		for node in nodes:
-			heap.push(node)
+			heap.push([node])
 
 		for index, node in enumerate(heap):
 			assert index < 5
@@ -126,7 +123,7 @@ class TestNodeHeap:
 		heap = NodeHeap(mkpeer(), maxsize)
 		nodes = [mkpeer() for _ in range(10)]
 		for node in nodes:
-			heap.push(node)
+			heap.push([node])
 
 		heap.remove([nodes[0], nodes[1]])
 		assert len(list(heap)) == maxsize

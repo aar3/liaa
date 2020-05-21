@@ -36,3 +36,5 @@
    - [enhancement] add various features of the paper
       - swap getopt parser for argeparse
       - swap ordereddict kbucket node cache for LRU cache
+### 05.17.20
+   - [enhancement] add mypy and typing

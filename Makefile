@@ -3,62 +3,26 @@
 .DEFAULT: help
 
 clean:
-	rm -rf ./virtualenv
-	rm -rfv ./build/
-	rm -rfv ./dist/
-	rm -rfv ./liaa.egg-info/
-	@echo "clean step finished"
+	rm -rfv build/
+	rm -rfv dist/
+	rm -rfv liaa.egg-info/
+	find . -name '*.pyc' -exec rm --force {}
 
 freeze:
-	./virtualenv/bin/python3.7 -m pip freeze > .requirements.lock
-	@echo "freeze step finished"
-
-help:
-	@echo "clean"
-	@echo "	Remove local virtualenv"
-
-	@echo "doc"
-	@echo "  build sphinx documentation"
-
-	@echo "freeze"
-	@echo "  Freeze pip requirements"
-
-	@echo "install-lock"
-	@echo "  Install requirements via lockfile"
-
-	@echo "lint"
-	@echo "  Run linter"
-
-	@echo "prep-dev-fresh"
-	@echo "  prepare dev env from requirements.txt (dev use only)"
-
-	@echo "prep-dev-lock"
-	@echo "  prepare dev env from .requirements.lock (dev use only)"
-
-	@echo "test-ci"
-	@echo "  run tests on travis CI"
-
-	@echo "test-local"
-	@echo "  run tests on local machine (uses static python)"
+	python -m pip freeze > .requirements.lock
+	@echo "freeze done"
 
 install-lock:
-	python -m pip install --upgrade -r .requirements.lock --trusted-host pypi.python.org
-	@echo "install-lock step finished"
+	python -m pip install --upgrade -r requirements/.requirements.lock --trusted-host pypi.python.org
+
+install:
+	python -m pip install --upgrade -r requirements/requirements.txt -r requirements/dev-requirements.txt -r requirements/test-requirements.txt
 
 lint:
 	python -m pylint liaa/
-	@echo "lint step finished"
 
-prep-dev-fresh:
-	python3.7 -m venv ./virtualenv
-	./virtualenv/bin/python -m pip install --upgrade -r dev-requirements.txt -r requirements.txt --trusted-host pypi.python.org
-	@echo "prep-dev-fresh step finished"
-
-prep-dev-lock:
-	python3.7 -m venv ./virtualenv
-	./virtualenv/bin/python -m pip install --upgrade -r .requirements.lock --trusted-host pypi.python.org
-	@echo "prep-dev-lock step finished"
+typing:
+	python -m mypy liaa/*.py -v --disallow-any-explicit --disallow-untyped-defs --no-implicit-optional
 
 test:
-	python -m pytest tests/* --cov-report term --cov=./
-	@echo "test step finished"
+	python -m pytest -s tests/* --cov-report term --cov=./ -vx
