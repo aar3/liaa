@@ -3,20 +3,21 @@ import random
 import string
 import struct
 import os
-import ssl
 import asyncio
+from typing import Union, Tuple, Any, Dict, List, Awaitable
+
 
 from liaa import BASE_INT, MAX_KEYSIZE, MAX_LONG, BYTE_ORDER
 
 
-def join_addr(addr):
+def join_addr(addr: Tuple[str, Union[int, str]]) -> str:
 	"""
 	Join a tuple address to string
 	"""
 	return ":".join(map(str, addr))
 
 
-def split_addr(addr):
+def split_addr(addr: str) -> Tuple[str, int]:
 	"""
 	Split a string address to tuple
 	"""
@@ -24,7 +25,7 @@ def split_addr(addr):
 	return host, int(port)
 
 
-def rand_str(num=MAX_KEYSIZE):
+def rand_str(num: int = MAX_KEYSIZE) -> str:
 	"""
 	Create a random string array
 	"""
@@ -32,21 +33,14 @@ def rand_str(num=MAX_KEYSIZE):
 	return "".join([random.choice(chars) for _ in range(num)])
 
 
-def rand_int_id():
+def rand_int_id() -> int:
 	"""
 	Create a random string array
 	"""
 	return random.randint(1, MAX_LONG)
 
 
-def int_to_hex(num: int):
-	"""
-	Convert an integer to hexidecimal format
-	"""
-	return int_to_digest(num).hex()
-
-
-async def gather_dict(dic):
+async def gather_dict(dic: Dict[str, Awaitable[Any]]) -> Dict[str, Any]:
 	"""
 	Execute a list of coroutines and return the results in a hashmap
 	"""
@@ -54,26 +48,9 @@ async def gather_dict(dic):
 	results = await asyncio.gather(*cors)
 	return dict(zip(dic.keys(), results))
 
-
-def int_to_digest(num):
-	"""
-	Convert base integer to bytes
-	"""
-	return num.to_bytes(BASE_INT, byteorder='big')
-
-
-def shared_prefix(args):
+def shared_prefix(args: List[str]) -> str:
 	"""
 	Find the shared prefix between the strings.
-
-	Parameters
-	----------
-		*args:
-			Variable length
-
-	Example
-	-------
-		assert 'blah' == shared_prefix(['blahblah', 'blahwhat'])
 	"""
 	i = 0
 	while i < min(map(len, args)):
@@ -83,7 +60,7 @@ def shared_prefix(args):
 	return args[0][:i]
 
 
-def bytes_to_bit_string(arr):
+def bytes_to_bits(arr: bytes) -> str:
 	"""
 	Convert a byte array to a bit array
 	"""
@@ -91,14 +68,14 @@ def bytes_to_bit_string(arr):
 	return "".join(bits)
 
 
-def hex_to_int(hexstr):
+def hex_to_int(hexstr: str) -> int:
 	"""
 	Convert given hex to a base-BASE_INT integer
 	"""
 	return int(hexstr, BASE_INT)
 
 
-def check_dht_value_type(value):
+def check_dht_value_type(value: Any) -> bool:
 	"""
 	Checks to see if the type of the value is a valid type for
 	placing in the dht.
@@ -146,14 +123,3 @@ def reverse_hex(number: int, base: int = BASE_INT):
 def long_to_key(number):
 	""" Convert a long int back to its digest format """
 	return unpack(bytes.fromhex(reverse_hex(number)))
-
-
-def load_ssl(cert, key):
-	"""
-	Create and return an SSL context used for examples/tests/debugging
-	"""
-	if (not cert and not key) or (not os.path.exists(cert) or not os.path.exists(key)):
-		return None
-	ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-	ssl_ctx.load_cert_chain(cert, key)
-	return ssl_ctx

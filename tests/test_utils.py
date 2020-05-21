@@ -4,7 +4,7 @@ from liaa import MAX_KEYSIZE, MAX_LONG, BASE_INT
 # pylint: disable=bad-continuation
 from liaa.utils import (
 	shared_prefix,
-	bytes_to_bit_string,
+	bytes_to_bits,
 	hex_to_int,
 	check_dht_value_type,
 	gather_dict,
@@ -14,7 +14,6 @@ from liaa.utils import (
 	pack,
 	rand_int_id,
 	long_to_key,
-	int_to_digest
 )
 
 
@@ -34,10 +33,10 @@ class TestUtils:
 		args = ['hi']
 		assert shared_prefix(args) == 'hi'
 
-	def test_bytes_to_bit_string(self):
+	def test_bytes_to_bits(self):
 		arr = b"hello world"
 		bstr = [bin(bite)[2:].rjust(8, '0') for bite in arr]
-		assert "".join(bstr) == bytes_to_bit_string(arr)
+		assert "".join(bstr) == bytes_to_bits(arr)
 
 	def test_to_base20_int(self):
 		num = 5
@@ -103,11 +102,6 @@ class TestUtils:
 		result = rand_int_id()
 		assert isinstance(result, int)
 		assert 0 < result < MAX_LONG
-
-	def test_int_to_digest(self):
-		num = 10
-		byte_arr = num.to_bytes(BASE_INT, byteorder='big')
-		assert byte_arr == int_to_digest(num)
 
 	def test_long_to_key(self):
 		key = rand_str(16)
