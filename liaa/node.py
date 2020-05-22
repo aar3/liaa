@@ -1,5 +1,5 @@
 from operator import itemgetter
-from typing import Optional, List, Union, Tuple, Set, Iterator, Any
+from typing import Optional, List, Tuple, Set, Iterator
 import heapq
 import logging
 
@@ -25,7 +25,7 @@ class Node:
 		self.long_id: int = hex_to_int(self.digest.hex())
 
 		if self.long_id > MAX_LONG + 1:
-			raise OverflowError("node.long_id cannot exceed " + MAX_LONG)
+			raise OverflowError("node long_id cannot exceed %i" % MAX_LONG)
 
 	def is_same_node(self, other: "Node") -> bool:
 		return self.key == other.key
@@ -40,7 +40,7 @@ class Node:
 		return self.long_id ^ node.long_id
 
 	def __eq__(self, other) -> bool:
-		return self.key == other.key
+		return self.long_id == other.long_id
 
 	def __hash__(self) -> int:
 		return self.long_id
@@ -58,9 +58,9 @@ class PeerNode(Node):
 		# pylint: disable=invalid-name
 		ip, port = split_addr(self.key)
 		self.ip: str = ip
-		self.port: str = port
+		self.port: int = port
 
-	def __iter__(self) -> Iterator[str]:
+	def __iter__(self) -> Iterator[object]:
 		return iter((self.key, self.ip, self.port))
 
 

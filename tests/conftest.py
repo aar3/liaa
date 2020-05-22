@@ -1,16 +1,13 @@
-import os
 import random
-import hashlib
-import struct
 import umsgpack
 
 import pytest
 
 from liaa import MAX_LONG
 from liaa.server import Server
-from liaa.node import Node, PeerNode, ResourceNode
+from liaa.node import PeerNode, ResourceNode
 from liaa.protocol import KademliaProtocol, Header
-from liaa.routing import RoutingTable, KBucket, LRUCache
+from liaa.routing import RoutingTable, KBucket, LRU
 from liaa.storage import StorageIface
 from liaa.utils import rand_str
 
@@ -41,11 +38,11 @@ def mkpeer():
 @pytest.fixture()
 def mklru():
 	def _mklru(maxsize=10):
-		cache = LRUCache(maxsize=maxsize)
+		lru = LRU(maxsize=maxsize)
 		items = [(x, str(x)) for x in range(5)]
 		for key, val in items:
-			cache[key] = val
-		return cache
+			lru.add(key, val)
+		return lru
 	return _mklru
 
 
@@ -120,7 +117,7 @@ def fake_server(mkpeer):
 
 @pytest.fixture
 def mkserver():
-	def _mkserver(iface=None, port=None, ksize=None, alpha=None):
+	def _mkserver(iface=None, port=None):
 		iface = iface or "0.0.0.0"
 		port = port or 8000
 		return Server(iface, port)

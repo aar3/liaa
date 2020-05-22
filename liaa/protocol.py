@@ -19,8 +19,8 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # pylint: disable=too-few-public-methods
 class Header:
-	Request = b'\x00'
-	Response = b'\x01'
+	Request = b"\x00"
+	Response = b"\x01"
 
 
 class MalformedMessage(Exception):
@@ -74,7 +74,7 @@ class RPCFindResponse:
 			Any:
 				Value of the response payload
 		"""
-		return self.response[1]['value']
+		return self.response[1]["value"]
 
 	def get_node_list(self):
 		"""
@@ -134,8 +134,11 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 				address of the peer sending the data; the exact format depends on the transport.
 		"""
 		# pylint: disable=bad-continuation
-		log.debug("%s got incoming dgram from peer at %s", str(self.source_node),
-				join_addr(addr))
+		log.debug(
+			"%s got incoming dgram from peer at %s",
+			str(self.source_node),
+			join_addr(addr),
+		)
 		asyncio.ensure_future(self._solve_dgram(data, addr))
 
 	async def _solve_dgram(self, buff, address):
@@ -151,8 +154,11 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
 		if len(buff) < 22:
 			# pylint: disable=bad-continuation
-			log.warning("%s received invalid dgram from %s, ignoring", str(self.source_node),
-						address)
+			log.warning(
+				"%s received invalid dgram from %s, ignoring",
+				str(self.source_node),
+				address,
+			)
 			return
 
 		if buff[:1] == Header.Request:
@@ -177,12 +183,19 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		msgargs = (base64.b64encode(idf), address)
 
 		if not idf in self._queue:
-			log.warning("%s could not mark datagram %s as received", str(self.source_node), idf)
+			log.warning(
+				"%s could not mark datagram %s as received", str(self.source_node), idf
+			)
 			return
 
 		# pylint: disable=bad-continuation
-		log.debug("%s %iB response for message id %s from %s", str(self.source_node),
-				sys.getsizeof(data), idf, join_addr(msgargs[1]))
+		log.debug(
+			"%s %iB response for message id %s from %s",
+			str(self.source_node),
+			sys.getsizeof(data),
+			idf,
+			join_addr(msgargs[1]),
+		)
 
 		fut, timeout = self._queue[idf]
 		fut.set_result((True, data))
@@ -220,8 +233,13 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		response = await func(address, *args)
 		txdata = Header.Response + idf + umsgpack.packb(response)
 		# pylint: disable=bad-continuation
-		log.debug("%s sending %iB response for msg id %s to %s", str(self.source_node), len(txdata),
-			base64.b64encode(idf), join_addr(address))
+		log.debug(
+			"%s sending %iB response for msg id %s to %s",
+			str(self.source_node),
+			len(txdata),
+			base64.b64encode(idf),
+			join_addr(address),
+		)
 		self.transport.sendto(txdata, address)
 
 	def _timeout(self, msg_id):
@@ -257,13 +275,19 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 			msg_id = hashlib.sha1(os.urandom(32)).digest()
 			data = umsgpack.packb([name, args])
 			if len(data) > 8192:
-				log.error("Total length of function name and arguments cannot exceed 8K")
+				log.error(
+					"Total length of function name and arguments cannot exceed 8K"
+				)
 				return None
 			txdata = Header.Request + msg_id + data
 
 			# pylint: disable=bad-continuation
-			log.debug("Attempting to execute rpc %s on peer at %s - msgid %s",
-						name, join_addr(address), base64.b64encode(msg_id))
+			log.debug(
+				"Attempting to execute rpc %s on peer at %s - msgid %s",
+				name,
+				join_addr(address),
+				base64.b64encode(msg_id),
+			)
 			self.transport.sendto(txdata, address)
 
 			# we assume python version >= 3.7
@@ -381,10 +405,12 @@ class HttpInterface(asyncio.Protocol):
 		node = self.storage.get(key)
 		# pylint: disable=bad-continuation
 		if node:
-			return self.pack_response(200, "OK",
-					json.dumps({"details": "found", "data": str(node)}))
-		return self.pack_response(404, "NOT FOUND",
-				json.dumps({"details": "not found"}))
+			return self.pack_response(
+				200, "OK", json.dumps({"details": "found", "data": str(node)})
+			)
+		return self.pack_response(
+			404, "NOT FOUND", json.dumps({"details": "not found"})
+		)
 
 	# pylint: disable=no-self-use
 	def pack_response(self, code, msg, body):
@@ -415,6 +441,7 @@ class HttpInterface(asyncio.Protocol):
 		]
 
 		return "\r\n".join(headers) + "\r\n\r\n" + body
+
 
 class KademliaProtocol(RPCDatagramProtocol):
 	def __init__(self, source_node, storage, ksize):
@@ -517,8 +544,13 @@ class KademliaProtocol(RPCDatagramProtocol):
 		source = PeerNode(join_addr(sender))
 		self.welcome_if_new(source)
 		# pylint: disable=bad-continuation
-		log.debug("%s got store request from %s, storing %iB at %s",
-					self.source_node, join_addr(sender), len(value), key)
+		log.debug(
+			"%s got store request from %s, storing %iB at %s",
+			self.source_node,
+			join_addr(sender),
+			len(value),
+			key,
+		)
 		resource = ResourceNode(key, value)
 		self.storage.set(resource)
 		return True
@@ -690,7 +722,9 @@ class KademliaProtocol(RPCDatagramProtocol):
 				furthest = neighbors[-1].distance_to(inode)
 				is_closer_than_furthest = node.distance_to(inode) < furthest
 				closest_distance_to_new = neighbors[0].distance_to(inode)
-				curr_distance_to_new = self.source_node.distance_to(inode) < closest_distance_to_new
+				curr_distance_to_new = (
+					self.source_node.distance_to(inode) < closest_distance_to_new
+				)
 
 			if not neighbors or (is_closer_than_furthest and curr_distance_to_new):
 				asyncio.ensure_future(self.call_store(node, inode.key, inode.value))
@@ -717,8 +751,11 @@ class KademliaProtocol(RPCDatagramProtocol):
 		"""
 		if not result[0]:
 			# pylint: disable=bad-continuation
-			log.warning("%s got no response from %s, removing from router",
-						self.source_node, node)
+			log.warning(
+				"%s got no response from %s, removing from router",
+				self.source_node,
+				node,
+			)
 			self.router.remove_contact(node)
 			return result
 

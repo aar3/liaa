@@ -9,10 +9,10 @@ if not WORKDIR in sys.path:
 
 
 MAX_BITSIZE = 200
-MAX_LONG = 2**MAX_BITSIZE
+MAX_LONG = 2 ** MAX_BITSIZE
 BASE_INT = 20
 MAX_KEYSIZE = 15
-BYTE_ORDER = 'I'
+BYTE_ORDER = "I"
 
 
 if sys.version_info.major < 3 or sys.version_info.minor < 7:

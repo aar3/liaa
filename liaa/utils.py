@@ -2,7 +2,6 @@ import operator
 import random
 import string
 import struct
-import os
 import asyncio
 from typing import Union, Tuple, Any, Dict, List, Awaitable
 
@@ -48,6 +47,7 @@ async def gather_dict(dic: Dict[str, Awaitable[Any]]) -> Dict[str, Any]:
 	results = await asyncio.gather(*cors)
 	return dict(zip(dic.keys(), results))
 
+
 def shared_prefix(args: List[str]) -> str:
 	"""
 	Find the shared prefix between the strings.
@@ -64,7 +64,7 @@ def bytes_to_bits(arr: bytes) -> str:
 	"""
 	Convert a byte array to a bit array
 	"""
-	bits = [bin(bite)[2:].rjust(8, '0') for bite in arr]
+	bits = [bin(bite)[2:].rjust(8, "0") for bite in arr]
 	return "".join(bits)
 
 
@@ -100,24 +100,24 @@ def unpack(arr, fmt=BYTE_ORDER):
 	return struct.unpack(fmt, arr[:size]), arr[size:]
 
 
-
 def reverse_hex(number: int, base: int = BASE_INT):
 	""" Used to reverse a long int back to its hexidecimal format """
+
 	def digit_to_char(digit):
 		if digit < 10:
 			return str(digit)
-		return chr(ord('a') + digit - 10)
+		return chr(ord("a") + digit - 10)
 
 	def _reverse_hex(number: int, base: int):
 		if number < 0:
-			return '-' + _reverse_hex(-number, base)
+			return "-" + _reverse_hex(-number, base)
 		# pylint: disable=invalid-name
 		(d, m) = divmod(number, base)
 		if d > 0:
 			return _reverse_hex(d, base) + digit_to_char(m)
 		return digit_to_char(m)
 
-	return  _reverse_hex(number, base)
+	return _reverse_hex(number, base)
 
 
 def long_to_key(number):

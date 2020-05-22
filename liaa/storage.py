@@ -1,4 +1,3 @@
-
 import functools
 import logging
 import operator
@@ -17,6 +16,7 @@ def pre_prune():
 	"""
 	Decorator (syntactic sugar) for a storage interface's prune() method
 	"""
+
 	def wrapper(func):
 		@functools.wraps(func)
 		def _pre_prune(*args, **kwargs):
@@ -29,7 +29,9 @@ def pre_prune():
 			log.debug("%s pruning items...", args[0].node)
 			args[0].prune()
 			return func(*args, **kwargs)
+
 		return _pre_prune
+
 	return wrapper
 
 
@@ -45,6 +47,7 @@ class IStorage:
 			Max age that items can live untouched before being pruned
 			(default=604800 seconds = 1 week)
 	"""
+
 	def __init__(self, node, ttl=604800):
 		self.node = node
 		self.ttl = ttl
@@ -86,7 +89,12 @@ class IStorage:
 		zipped = self._triple_iter()
 		matches = takewhile(lambda r: min_birthday >= r[2], zipped)
 		items = list(map(operator.itemgetter(0, 1), matches))
-		log.debug("%s returning %i nodes via iter_older_than=%i", self.node, len(items), seconds_old)
+		log.debug(
+			"%s returning %i nodes via iter_older_than=%i",
+			self.node,
+			len(items),
+			seconds_old,
+		)
 		return items
 
 	def remove(self, key):
@@ -268,7 +276,6 @@ class DiskStorage(IStorage):
 		values = [item[1] for item in items]
 		return zip(self.contents(), values, bdays)
 
-
 	def contents(self):
 		"""
 		List all nodes in storage
@@ -322,7 +329,9 @@ class DiskStorage(IStorage):
 
 	@pre_prune()
 	def __iter__(self):
-		log.debug("%s iterating over %i items in storage", self.node, len(self.contents()))
+		log.debug(
+			"%s iterating over %i items in storage", self.node, len(self.contents())
+		)
 		items = self._triple_iter()
 		nodes = [ResourceNode(*item) for item in items]
 		for node in nodes:

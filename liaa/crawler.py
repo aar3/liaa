@@ -64,8 +64,12 @@ class SpiderCrawl:
 				_nodes_found callback, which should be overloaded in sub-classes
 		"""
 		# pylint: disable=bad-continuation
-		log.info("%s making find with %s on nearest: %s", self.node,
-				rpcmethod.__name__, ",".join(map(str, self.nearest)))
+		log.info(
+			"%s making find with %s on nearest: %s",
+			self.node,
+			rpcmethod.__name__,
+			",".join(map(str, self.nearest)),
+		)
 		count = self.alpha
 		if self.nearest.get_ids() == self.last_ids_crawled:
 			count = len(self.nearest)
@@ -75,8 +79,12 @@ class SpiderCrawl:
 		for node in self.nearest.get_uncontacted()[:count]:
 			if not node.is_peer_node():
 				# pylint: disable=bad-continuation
-				log.warning("Will not execute %s on %s %s", rpcmethod.__name__,
-							node.__class__.__name__, str(node))
+				log.warning(
+					"Will not execute %s on %s %s",
+					rpcmethod.__name__,
+					node.__class__.__name__,
+					str(node),
+				)
 				return
 			dicts[node.key] = rpcmethod(node, self.node)
 			self.nearest.mark_contacted(node)
@@ -221,7 +229,12 @@ class ValueSpiderCrawl(SpiderCrawl):
 
 		peer = self.nearest_without_value.popleft()
 		if peer:
-			log.debug("%s asking nearest node %i to store %s", self.node, peer.long_id, str(value))
+			log.debug(
+				"%s asking nearest node %i to store %s",
+				self.node,
+				peer.long_id,
+				str(value),
+			)
 			await self.protocol.call_store(peer, self.node.key, value)
 		return value
 

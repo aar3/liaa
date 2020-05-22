@@ -4,106 +4,83 @@ import random
 import pytest
 
 from liaa import MAX_LONG
-from liaa.routing import KBucket, TableTraverser, RoutingTable, LRUCache
+from liaa.routing import KBucket, TableTraverser, RoutingTable, LRU
 from liaa.server import KademliaProtocol
 from liaa.utils import rand_str, join_addr
 
 
 
-class TestLRUCache:
+class TestLRU:
 	# pylint: disable=no-self-use
-	def can_instantiate(self):
-		cache = LRUCache(maxsize=10)
-		assert isinstance(cache, LRUCache)
-		assert cache.maxsize == 10
+	def test_can_init_lru(self):
+		lru = LRU(maxsize=10)
+		assert isinstance(lru, LRU)
+		assert lru.maxsize == 10
 
-	def test_can_add_item(self):
-		cache = LRUCache(maxsize=10)
+	def test_can_add_item_to_lru(self):
+		lru = LRU(maxsize=10)
 		items = [(x, str(x)) for x in range(5)]
 		for key, val in items:
-			cache[key] = val
-		assert len(cache) == 5
+			lru.add(key, val)
+		assert len(lru) == 5
 
-	def test_add(self, mklru):
-		cache = mklru()
-		cache.add(5, '5')
-		assert len(cache) == 6
-		assert 5 in cache
+	def test_can_add_to_lru_head(self, mklru):
+		lru = mklru()
+		lru.add_head(-1, "-1")
+		assert len(lru) == 6
 
-	def test_add_head(self, mklru):
-		cache = mklru()
-		cache.add_head(-1, '-1')
-		assert len(cache) == 6
-		node = cache.items[-1]
+		item = lru.items()[0]
 
-		assert not node.prev
-		assert node.next.key == 0 and node.next.val == '0'
+		assert item == (-1, "-1")
 
-	def test_remove(self, mklru):
-		cache = mklru()
-		cache.remove(3)
+	def test_can_pop_from_lru(self, mklru):
+		lru = mklru()
+		lru.add(11, 11)
+		assert lru.pop() == (11, 11)
 
-		assert len(cache) == 4
-		assert 3 not in cache.items
-
-	def test_pop(self, mklru):
-		cache = mklru()
-		key, val = cache.pop()
-		assert key == 4 and val == '4'
 
 class TestKBucket:
 	# pylint: disable=no-self-use
-	def test_instantiation(self):
+	def test_can_init_bucket(self):
 		bucket = KBucket(0, 10, 5)
 		assert isinstance(bucket, KBucket)
 		assert bucket.last_seen
 
-	def test_can_add_node(self, mkpeer):
+	def test_can_add_node_to_bucket(self, mkpeer):
 		bucket = KBucket(0, 10, 2)
 		assert bucket.add_node(mkpeer()) is True
 		assert bucket.add_node(mkpeer()) is True
 		assert bucket.add_node(mkpeer()) is False
 		assert len(bucket) == 2
 
-	def test_can_get_node(self, mkpeer):
+	def test_can_get_node_from_bucket(self, mkpeer):
 		bucket = KBucket(0, 10, 2)
 		bucket.add_node(mkpeer())
 		bucket.add_node(mkpeer())
-		fetched = bucket.get_nodes()
+		fetched = bucket.get_set()
 		assert len(fetched) == 2
 
-	def test_excess_nodes_are_replacements(self, mkpeer):
+	def test_excess_nodes_added_to_bucket_become_replacements(self, mkpeer):
 		k = 3
 		bucket = KBucket(0, 10, 3)
 		nodes = [mkpeer() for x in range(10)]
 		for node in nodes:
 			bucket.add_node(node)
 
-		assert bucket.get_nodes() == nodes[:k]
-		assert bucket.get_replacement_nodes() == nodes[k:]
-
-	def test_remove_does_nothing(self, mkpeer):
-		k = 3
-		bucket = KBucket(0, 10, k)
-		nodes = [mkpeer() for _ in range(10)]
-		for node in nodes:
-			bucket.add_node(node)
-
-		bucket.remove_node(nodes.pop())
-		assert bucket.get_nodes() == nodes[:k]
-		assert bucket.get_replacement_nodes() == nodes[k:]
+		assert bucket.get_set() == nodes[:k]
+		assert bucket.get_replacement_set() == nodes[k:]
 
 	def test_remove_replaces_with_replacement(self, mknode):
 		bucket = KBucket(0, 10, 3)
 		nodes = [mknode() for x in range(10)]
 		for node in nodes:
 			bucket.add_node(node)
-		assert len(bucket.replacement_nodes) == 7
+		assert len(bucket.replacement_set) == 7
 
-		replacements = bucket.get_replacement_nodes()
+		replacements = bucket.get_replacement_set()
 		bucket.remove_node(nodes.pop(0))
-		assert len(bucket.get_replacement_nodes()) == 6
-		assert replacements[-1] in bucket.get_nodes()
+		assert len(bucket.get_replacement_set()) == 6
+		assert replacements[-1] in bucket.get_set()
 
 	def test_remove_all_nodes_uninitializes_bucket(self, mknode):
 		bucket = KBucket(0, 10, 3)
@@ -130,14 +107,14 @@ class TestKBucket:
 		assert len(one) + len(two) == len(bucket)
 
 	def test_double_added_node_is_put_at_end(self, mkpeer):
-		# make sure when a node is double added it's put at the end
+		# make sure when a node is double added it"s put at the end
 		bucket = KBucket(0, 10, 3)
 		same = mkpeer()
 		nodes = [mkpeer(), same, same]
 		for node in nodes:
 			bucket.add_node(node)
 
-		for index, node in enumerate(bucket.get_nodes()):
+		for index, node in enumerate(bucket.get_set()):
 			assert node == nodes[index]
 
 	def test_bucket_has_in_range(self, mkpeer, mkresource):
@@ -151,7 +128,7 @@ class TestKBucket:
 		try:
 			bucket.has_in_range(mkresource(key=rand_str(21))) is False
 		except OverflowError as err:
-			assert str(err).endswith('cannot exceed ' + str(MAX_LONG))
+			assert str(err).endswith("cannot exceed " + str(MAX_LONG))
 
 
 class TestRoutingTable:
@@ -207,7 +184,7 @@ class TestRoutingTable:
 		table = RoutingTable(KademliaProtocol, ksize, node=mkpeer())
 		table.add_contact(mkpeer())
 		assert len(table.buckets) == 1
-		assert len(table.buckets[0].nodes) == 1
+		assert len(table.buckets[0]) == 1
 
 	@pytest.mark.skip(reason="TODO: implement after crawler tests")
 	def test_find_neighbors_returns_k_neighbors(self, mkpeer, _):

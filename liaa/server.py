@@ -68,7 +68,10 @@ class Server:
 			ctx: Optional[ssl.SSLContext]
 		"""
 		if not ctx:
-			log.warning("%s ssl context being set to none. http traffic not encrypted", self.node)
+			log.warning(
+				"%s ssl context being set to none. http traffic not encrypted",
+				self.node,
+			)
 		self._ssl_ctx = ctx
 
 	def stop(self):
@@ -120,8 +123,9 @@ class Server:
 		"""
 		loop = asyncio.get_event_loop()
 		# pylint: disable=bad-continuation
-		listen = loop.create_datagram_endpoint(self._create_protocol,
-												local_addr=(self.node.ip, self.node.port))
+		listen = loop.create_datagram_endpoint(
+			self._create_protocol, local_addr=(self.node.ip, self.node.port)
+		)
 		log.info("%s udp listening at udp://%s", self.node, self.node.key)
 
 		self.udp_transport, self.protocol = await listen
@@ -130,9 +134,12 @@ class Server:
 		self.refresh_table()
 
 		# pylint: disable=bad-continuation
-		self.listener = await loop.create_server(self._create_http_iface,
-												host=self.node.ip, port=self.node.port,
-												ssl=self._ssl_ctx)
+		self.listener = await loop.create_server(
+			self._create_http_iface,
+			host=self.node.ip,
+			port=self.node.port,
+			ssl=self._ssl_ctx,
+		)
 		log.info("%s https listening at https://%s", self.node, self.node.key)
 
 		asyncio.ensure_future(self.listener.serve_forever())
@@ -158,8 +165,12 @@ class Server:
 		for key in self.protocol.get_refresh_ids():
 			node = Node(key=key)
 			nearest = self.protocol.router.find_neighbors(node, self.alpha)
-			log.debug("%s refreshing routing table on %i nearest", self.node, len(nearest))
-			spider = NodeSpiderCrawl(self.protocol, node, nearest, self.ksize, self.alpha)
+			log.debug(
+				"%s refreshing routing table on %i nearest", self.node, len(nearest)
+			)
+			spider = NodeSpiderCrawl(
+				self.protocol, node, nearest, self.ksize, self.alpha
+			)
 			results.append(spider.find())
 
 		await asyncio.gather(*results)
@@ -207,7 +218,9 @@ class Server:
 		cos = list(map(self.bootstrap_node, addrs))
 		gathered = await asyncio.gather(*cos)
 		nodes = [node for node in gathered if node is not None]
-		spider = NodeSpiderCrawl(self.protocol, self.node, nodes, self.ksize, self.alpha)
+		spider = NodeSpiderCrawl(
+			self.protocol, self.node, nodes, self.ksize, self.alpha
+		)
 		return await spider.find()
 
 	async def bootstrap_node(self, addr):
@@ -331,19 +344,21 @@ class Server:
 
 		# pylint: disable=bad-continuation
 		data = {
-			'interface': self.node.ip,
-			'port': self.node.port,
-			'ksize': self.ksize,
-			'alpha': self.alpha,
-			'id': self.node.key,
-			'neighbors': self.bootstrappable_neighbors()
+			"interface": self.node.ip,
+			"port": self.node.port,
+			"ksize": self.ksize,
+			"alpha": self.alpha,
+			"id": self.node.key,
+			"neighbors": self.bootstrappable_neighbors(),
 		}
 
-		if not data['neighbors']:
-			log.warning("%s has no known neighbors, so not writing to cache.", self.node)
+		if not data["neighbors"]:
+			log.warning(
+				"%s has no known neighbors, so not writing to cache.", self.node
+			)
 			return
 
-		with open(fname, 'wb') as file:
+		with open(fname, "wb") as file:
 			pickle.dump(data, file)
 
 	def load_state(self, fname=None):
@@ -365,13 +380,15 @@ class Server:
 		fname = fname or self.statefile
 		log.info("%i loading state from %s", self.node, fname)
 
-		with open(fname, 'rb') as file:
+		with open(fname, "rb") as file:
 			data = pickle.load(file)
 
-		svr = Server(data['interface'], data['port'], ksize=data['ksize'], alpha=data['alpha'])
+		svr = Server(
+			data["interface"], data["port"], ksize=data["ksize"], alpha=data["alpha"]
+		)
 
-		if data['neighbors']:
-			asyncio.ensure_future(svr.bootstrap(data['neighbors']))
+		if data["neighbors"]:
+			asyncio.ensure_future(svr.bootstrap(data["neighbors"]))
 
 		return svr
 
@@ -393,7 +410,6 @@ class Server:
 		loop = asyncio.get_event_loop()
 
 		# pylint: disable=bad-continuation
-		self.save_state_loop = loop.call_later(frequency,
-												self.save_state_regularly,
-												fname,
-												frequency)
+		self.save_state_loop = loop.call_later(
+			frequency, self.save_state_regularly, fname, frequency
+		)
