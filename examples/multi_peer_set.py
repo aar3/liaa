@@ -18,13 +18,13 @@ import sys
 import getopt
 
 from liaa.server import Server
-from liaa.node import ResourceNode, PeerNode
+from liaa.node import StorageNode, NetworkNode
 from liaa.utils import rand_str, split_addr, load_ssl
 
 
 async def make_fake_data(server):
 	while True:
-		node = ResourceNode(key=rand_str(), value=rand_str().encode())
+		node = StorageNode(key=rand_str(), value=rand_str().encode())
 		await server.set(node)
 		await asyncio.sleep(5)
 

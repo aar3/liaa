@@ -23,7 +23,7 @@ import threading
 
 from liaa.server import Server
 from liaa.utils import rand_str, load_ssl
-from liaa.node import ResourceNode, PeerNode
+from liaa.node import StorageNode, NetworkNode
 
 # pylint: disable=invalid-name
 host = "127.0.0.1"
@@ -41,7 +41,7 @@ log.setLevel(logging.DEBUG)
 
 async def make_fake_data(server):
 	while True:
-		node = ResourceNode(key=rand_str(), value=rand_str().encode())
+		node = StorageNode(key=rand_str(), value=rand_str().encode())
 		await server.set(node)
 		await asyncio.sleep(5)
 

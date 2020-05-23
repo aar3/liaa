@@ -21,6 +21,9 @@ install:
 lint:
 	python -m pylint liaa/
 
+format:
+	python -m black liaa/*.py && python -m black tests/*.py
+
 typing:
 	python -m mypy liaa/*.py -v --disallow-any-explicit --disallow-untyped-defs --no-implicit-optional
 
