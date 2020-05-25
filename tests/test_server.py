@@ -2,7 +2,7 @@ import asyncio
 import os
 
 from liaa.server import Server
-from liaa.protocol import KademliaProtocol, HttpInterface
+from liaa.protocol import KademliaProtocol
 from liaa.storage import StorageIface
 
 
@@ -10,7 +10,6 @@ class TestServer:
 
     loop = asyncio.get_event_loop()
 
-    # pylint: disable=no-self-use
     def test_can_instantiate(self):
         server = Server("0.0.0.0", 8000)
         assert isinstance(server, Server)
@@ -99,34 +98,3 @@ class TestServer:
         assert isinstance(loaded_server, Server)
 
         box.restore()
-
-
-class TestHttpInterface:
-    # pylint: disable=no-self-use
-    def test_can_instantiate(self, make_network_node):
-        node = make_network_node()
-        iface = HttpInterface(node, storage=StorageIface(node))
-        assert not iface.transport
-
-    def test_call_store(self, make_network_node):
-        node = make_network_node()
-        iface = HttpInterface(node, storage=StorageIface(node))
-        response = iface.call_store("mykey", b"myvalue")
-        assert response.startswith("HTTP/1.1 OK 200")
-        assert response.endswith('{"details": "ok"}')
-
-    def test_fetch_data_returns_none(self, make_network_node):
-        node = make_network_node()
-        iface = HttpInterface(node, storage=StorageIface(node))
-        response = iface.fetch_data("notexists")
-        assert response.startswith("HTTP/1.1 NOT FOUND 404")
-        assert response.endswith('{"details": "not found"}')
-
-    def test_fetch_data_returns_data(self, make_network_node, make_storage_node):
-        node = make_network_node()
-        iface = HttpInterface(node, storage=StorageIface(node))
-        resource = make_storage_node("mykey", b"myvalue")
-        iface.storage.set(resource)
-        response = iface.fetch_data(resource.key)
-        assert response.startswith("HTTP/1.1 OK 200")
-        assert '"details": "found"' in response

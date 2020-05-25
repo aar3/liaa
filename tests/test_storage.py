@@ -5,7 +5,6 @@ from liaa.storage import EphemeralStorage
 
 
 class TestEphemeralStorage:
-    # pylint: disable=no-self-use
     def test_can_init_ephemeral_storage(self, make_network_node):
         storage = EphemeralStorage(make_network_node(), 10)
         assert isinstance(storage, EphemeralStorage)
@@ -33,7 +32,7 @@ class TestEphemeralStorage:
         resource = make_storage_node(key="one", value=b"two")
         storage.set(resource)
 
-        node = storage.get(resource.long_id)
+        node = storage.get(resource.key)
         assert node == make_storage_node(key="one", value=b"two")
 
     def test_can_remove_storage_node(self, make_storage_node, make_storage):
@@ -67,7 +66,7 @@ class TestEphemeralStorage:
             storage.set(node)
 
         for i, node in enumerate(storage):
-            assert node.long_id == nodes[i].long_id
+            assert node.key == nodes[i].key
 
     def test_contains_returns_whether_or_not_node_exists_in_storage(
         self, make_storage, make_storage_node

@@ -10,7 +10,6 @@ class LintError(Exception):
 
 
 class TestCodeLinting:
-    # pylint: disable=no-self-use
     @pytest.mark.skip(reason="test linting on a as-needed basis")
     def test_pylint(self):
         (stdout, _) = lint.py_run("liaa", return_std=True)
@@ -18,7 +17,6 @@ class TestCodeLinting:
         if errors.strip():
             raise LintError(errors)
 
-    # pylint: disable=no-self-use
     @pytest.mark.skip(reason="test linting on a as-needed basis")
     def test_pep8(self):
         style = pycodestyle.StyleGuide()

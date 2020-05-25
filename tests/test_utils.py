@@ -19,8 +19,6 @@ from liaa.utils import (
 
 
 class TestUtils:
-
-    # pylint: disable=no-self-use
     def test_shared_prefix(self):
         args = ["prefix", "prefixasdf", "prefix", "prefixxxx"]
         assert shared_prefix(args) == "prefix"

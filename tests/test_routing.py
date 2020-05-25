@@ -10,7 +10,6 @@ from liaa.utils import rand_str, join_addr
 
 
 class TestLRU:
-    # pylint: disable=no-self-use
     def test_can_init_lru(self):
         lru = LRU(maxsize=10)
         assert isinstance(lru, LRU)
@@ -39,7 +38,6 @@ class TestLRU:
 
 
 class TestKBucket:
-    # pylint: disable=no-self-use
     def test_can_init_bucket(self):
         bucket = KBucket(0, 10, 5)
         assert isinstance(bucket, KBucket)
@@ -130,8 +128,6 @@ class TestKBucket:
 
 
 class TestRoutingTable:
-
-    # pylint: disable=no-self-use
     def test_can_flush_table(self, make_network_node):
         ksize = 3
         table = RoutingTable(KademliaProtocol, ksize=ksize, node=make_network_node())
@@ -194,8 +190,7 @@ class TestRoutingTable:
 
 # pylint: disable=too-few-public-methods
 class TestTableTraverser:
-    # pylint: disable=no-self-use
-    def test_iteration(self, make_fake_server, make_network_node):
+    def test_iteration(self, make_server, make_network_node):
         nodes = []
         for port in range(8000, 8010):
             key = join_addr(("0.0.0.0", port))
@@ -208,7 +203,7 @@ class TestTableTraverser:
             bucket.add_node(nodes[2 * i + 1])
             buckets.append(bucket)
 
-        make_fake_server.router.buckets = buckets
+        make_server.router.buckets = buckets
 
         # pylint: disable=bad-continuation
         expected_nodes = [
@@ -225,6 +220,6 @@ class TestTableTraverser:
         ]
 
         start_node = nodes[4]
-        table_traverser = TableTraverser(make_fake_server.router, start_node)
+        table_traverser = TableTraverser(make_server.router, start_node)
         for index, node in enumerate(table_traverser):
             assert node == expected_nodes[index]

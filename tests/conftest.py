@@ -32,7 +32,7 @@ def make_network_node():
         """
 		Make a peer node.  Created a random id if not specified.
 		"""
-        key = key or f"127.0.0.1:{random.randint(1000, 9000)}"
+        key = key or "0.0.0.0:" + str(random.randint(1000, 9000))
         return NetworkNode(key)
 
     return _make_network_node
@@ -91,15 +91,15 @@ class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
 
 
 @pytest.fixture()
-def make_fake_protocol(make_network_node):
-    def _make_fake_protocol(node=None, ksize=20):
+def make_proto(make_network_node):
+    def _make_proto(node=None, ksize=20):
         """
 		Create a fake protocol
 		"""
         node = node or make_network_node()
         return FakeProtocol(node, EphemeralStorage(node), ksize=ksize)
 
-    return _make_fake_protocol
+    return _make_proto
 
 
 @pytest.fixture()
@@ -127,7 +127,7 @@ class FakeServer:
 
 
 @pytest.fixture
-def make_fake_server(make_network_node):
+def make_server(make_network_node):
     return FakeServer(make_network_node())
 
 
@@ -139,7 +139,7 @@ def mkserver():
     return _mkserver
 
 
-class make_sandbox:
+class Sandbox:
     def __init__(self, obj):
         self.obj = obj
         self.mem = {}
@@ -158,6 +158,6 @@ def make_sandbox():
     def _make_sandbox(obj=None):
         if not obj:
             raise RuntimeError("make_sandbox object cannot be None")
-        return make_sandbox(obj)
+        return Sandbox(obj)
 
     return _make_sandbox

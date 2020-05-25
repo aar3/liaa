@@ -8,27 +8,24 @@ import itertools
 
 import umsgpack
 
-# pylint: disable=bad-continuation
-from liaa.protocol import KademliaProtocol, RPCDatagramProtocol, HttpInterface, Header
+from liaa.protocol import KademliaProtocol, RPCDatagramProtocol, Header
 from liaa.routing import RoutingTable
 from liaa.node import Node, StorageNode
-from liaa.storage import EphemeralStorage, StorageIface, BaseStorage
+from liaa.storage import EphemeralStorage
 
 
 class TestRPCDatagramProtocol:
-    # pylint: disable=no-self-use
     loop = asyncio.get_event_loop()
 
-    def test_can_instantiate(self, make_network_node):
+    def test_can_init_proto(self, make_network_node):
         node = make_network_node()
         proto = RPCDatagramProtocol(node, wait=5)
         assert isinstance(proto, RPCDatagramProtocol)
         assert proto.source_node.key == node.key
-        assert not proto._queue
+        assert not proto.index
 
-    def test_accept_request(self, make_network_node, make_datagram, make_sandbox):
-        node = make_network_node()
-        proto = RPCDatagramProtocol(node)
+    def test_proto_can_accept_request(self, make_datagram, make_sandbox, make_proto):
+        proto = make_proto()
 
         box = make_sandbox(proto)
 
@@ -47,102 +44,76 @@ class TestRPCDatagramProtocol:
         assert header == Header.Request
         assert data == "12345"
 
-    def test_accept_response(self, make_network_node, make_datagram, make_sandbox):
-        node = make_network_node()
-        proto = RPCDatagramProtocol(node)
+    def test_proto_can_accept_response_via_stub(
+        self, make_datagram, make_proto, make_sandbox
+    ):
+        proto = make_proto()
         dgram = make_datagram()
 
         def timeout_fut(dgram):
             return self.loop.call_later(10, asyncio.sleep(10), dgram[1:21])
 
-        proto._queue[dgram[1:21]] = (self.loop.create_future(), timeout_fut(dgram))
+        proto.index[dgram[1:21]] = (self.loop.create_future(), timeout_fut(dgram))
 
-        assert len(proto._queue) == 1
+        assert len(proto.index) == 1
 
         box = make_sandbox(proto)
 
         def accept_response_stub(dgram, proto, addr):
             idf, data = dgram[1:21], umsgpack.unpackb(dgram[21:])
             msgargs = (base64.b64encode(idf), addr)
-            fut, timeout = proto._queue[idf]
+            fut, timeout = proto.index[idf]
             fut.set_result((True, data))
             timeout.cancel()
-            del proto._queue[idf]
+            del proto.index[idf]
             return msgargs
 
         box.stub("_accept_response", accept_response_stub)
 
         address = ("127.0.0.1", 8000)
-        msgid, address = proto._accept_response(dgram, proto, address)
-        assert msgid == base64.b64encode(dgram[1:21])
-        assert address == address
-        assert not proto._queue
 
-    def test_accept_response_returns_empty(self, make_network_node, make_datagram):
-        node = make_network_node()
-        proto = RPCDatagramProtocol(node)
+        msgid, addr = proto._accept_response(dgram, proto, address)
+        assert msgid == base64.b64encode(dgram[1:21])
+        assert addr == address
+        assert not proto.index
+
+    def test_proto_accept_response_returns_none_when_msg_id_not_in_proto_index(
+        self, make_proto, make_datagram
+    ):
+        proto = make_proto()
         dgram = make_datagram()
 
         result = proto._accept_response(dgram, ("127.0.0.1", 8000))
         assert not result
 
-    def test_timeout_times_msg_out(self, make_network_node, make_datagram):
-        node = make_network_node()
-        proto = RPCDatagramProtocol(node)
+    def test_proto_msg_timeout_removes_msg_from_index_when_msg_times_out(
+        self, make_proto, make_datagram
+    ):
+        proto = make_proto()
         dgram = make_datagram()
 
         def timeout_fut(dgram):
             return self.loop.call_later(10, asyncio.sleep(10), dgram[1:21])
 
-        proto._queue[dgram[1:21]] = (self.loop.create_future(), timeout_fut(dgram))
+        proto.index[dgram[1:21]] = (self.loop.create_future(), timeout_fut(dgram))
         proto._timeout(dgram[1:21])
-        assert dgram[1:21] not in proto._queue
-
-
-class TestHttpInterface:
-    # pylint: disable=no-self-use
-    def test_can_instantiate(self, make_network_node):
-        node = make_network_node()
-        iface = HttpInterface(node, storage=StorageIface(node))
-        assert not iface.transport
-
-    def test_call_store(self, make_network_node):
-        node = make_network_node()
-        iface = HttpInterface(node, storage=StorageIface(node))
-        response = iface.call_store("mykey", b"myvalue")
-        assert response.startswith("HTTP/1.1 OK 200")
-        assert response.endswith('{"details": "ok"}')
-
-    def test_fetch_data_returns_none(self, make_network_node):
-        node = make_network_node()
-        iface = HttpInterface(node, storage=StorageIface(node))
-        response = iface.fetch_data("notexists")
-        assert response.startswith("HTTP/1.1 NOT FOUND 404")
-        assert response.endswith('{"details": "not found"}')
-
-    def test_fetch_data_returns_data(self, make_network_node, make_storage_node):
-        node = make_network_node()
-        iface = HttpInterface(node, storage=StorageIface(node))
-        resource = make_storage_node("mykey", b"myvalue")
-        iface.storage.set(resource)
-        response = iface.fetch_data(resource.key)
-        assert response.startswith("HTTP/1.1 OK 200")
-        assert '"details": "found"' in response
+        assert dgram[1:21] not in proto.index
 
 
 class TestKademliaProtocol:
-    # pylint: disable=no-self-use
-
-    def test_can_instantiate(self, make_network_node):
+    def test_can_init_proto(self, make_network_node):
         node = make_network_node()
         proto = KademliaProtocol(node, storage=EphemeralStorage(node), ksize=20)
         assert isinstance(proto, KademliaProtocol)
-        assert isinstance(proto.storage, BaseStorage)
+        assert isinstance(proto.storage, EphemeralStorage)
 
-    def test_can_get_refresh_ids(self, make_fake_protocol, make_basic_node):
+    def test_proto_can_get_refresh_ids_of_stale_buckets(
+        self, make_proto, make_basic_node
+    ):
         ksize = 3
-        proto = make_fake_protocol(ksize=ksize)
+        proto = make_proto(ksize=ksize)
         proto.router = RoutingTable(proto, ksize, proto.source_node)
+
         for x in range(4):
             node = make_basic_node()
             node.long_id = x
@@ -160,16 +131,18 @@ class TestKademliaProtocol:
         assert to_refresh
         assert all([isinstance(n, Node) for n in to_refresh])
 
-    def test_rpc_stun_returns_node(self, make_network_node, make_fake_protocol):
-        proto = make_fake_protocol()
+    def test_proto_rpc_stun_returns_same_sender_arg_that_was_passed(
+        self, make_network_node, make_proto
+    ):
+        proto = make_proto()
         sender = make_network_node()
         assert sender == proto.rpc_stun(sender)
 
-    def test_rpc_ping_returns_requestors_id(
-        self, make_network_node, make_fake_protocol, make_sandbox
+    def test_proto_rpc_ping_returns_requestors_id(
+        self, make_network_node, make_proto, make_sandbox
     ):
         sender = make_network_node()
-        proto = make_fake_protocol()
+        proto = make_proto()
 
         # pylint: disable=unused-argument
         def ping_stub(sender, node_id):
@@ -188,19 +161,22 @@ class TestKademliaProtocol:
 
         box.restore()
 
-    def test_rpc_stores(self, make_network_node, make_fake_protocol):
+    def test_proto_rpc_store_stores_a_give_key_value_pair(
+        self, make_network_node, make_proto
+    ):
         sender = make_network_node()
-        proto = make_fake_protocol()
+        proto = make_proto()
 
-        success = proto.rpc_store((sender.ip, sender.port), sender.key, "foo", b"bar")
+        success = proto.rpc_store(sender, "foo", b"bar")
         assert success
 
-        # make sure
         result = proto.storage.get("foo")
-        assert str(result) == "resource@foo"
+
+        assert result.key == "foo"
+        assert result.value == b"bar"
 
     def test_welcome_if_new_fails(
-        self, make_fake_protocol, make_sandbox, make_basic_node, make_storage_node
+        self, make_proto, make_sandbox, make_basic_node, make_storage_node
     ):
         def welcome_if_new_stub(proto, node):
             if not proto.router.is_new_node(node) or isinstance(node, StorageNode):
@@ -220,7 +196,7 @@ class TestKademliaProtocol:
             proto.router.add_contact(node)
 
         # if node is not new node
-        proto = make_fake_protocol()
+        proto = make_proto()
         box = make_sandbox(proto)
         node = make_basic_node()
         box.stub("welcome_if_new", welcome_if_new_stub)
@@ -228,16 +204,16 @@ class TestKademliaProtocol:
         assert not proto.welcome_if_new(proto, node)
 
         # if node is resource node
-        proto = make_fake_protocol()
+        proto = make_proto()
         box = make_sandbox(proto)
         node = make_storage_node()
         box.stub("welcome_if_new", welcome_if_new_stub)
         assert not proto.welcome_if_new(proto, node)
 
     def test_welcome_if_new_adds(
-        self, make_fake_protocol, make_network_node, make_sandbox, make_storage_node
+        self, make_proto, make_network_node, make_sandbox, make_storage_node
     ):
-        proto = make_fake_protocol()
+        proto = make_proto()
         box = make_sandbox(proto)
 
         def welcome_if_new_stub(proto, node):
@@ -287,9 +263,9 @@ class TestKademliaProtocol:
         assert proto.router.total_nodes() == prevsize + 1
 
     def test_welcome_if_new_calls_store(
-        self, make_fake_protocol, make_network_node, make_sandbox, make_storage_node
+        self, make_proto, make_network_node, make_sandbox, make_storage_node
     ):
-        proto = make_fake_protocol()
+        proto = make_proto()
         box = make_sandbox(proto)
 
         def welcome_if_new_stub(proto, node):
@@ -331,9 +307,9 @@ class TestKademliaProtocol:
         assert proto.router.total_nodes() == prevsize + 1
 
     def test_rpc_find_node_returns_neighbors(
-        self, make_basic_node, make_fake_protocol, make_network_node
+        self, make_basic_node, make_proto, make_network_node
     ):
-        proto = make_fake_protocol()
+        proto = make_proto()
         nodes = [make_basic_node() for _ in range(10)]
         for node in nodes:
             proto.router.add_contact(node)
@@ -342,16 +318,16 @@ class TestKademliaProtocol:
         assert isinstance(result, list)
         assert len(result) == 9
 
-    def test_rpc_find_node_returns_empty(self, make_fake_protocol, make_network_node):
-        proto = make_fake_protocol()
+    def test_rpc_find_node_returns_empty(self, make_proto, make_network_node):
+        proto = make_proto()
         sender = make_network_node()
         result = proto.rpc_find_node(sender, sender.key, "notAKey")
         assert not result
 
     def test_rpc_find_value_returns_value(
-        self, make_fake_protocol, make_network_node, make_storage_node
+        self, make_proto, make_network_node, make_storage_node
     ):
-        proto = make_fake_protocol()
+        proto = make_proto()
         nodes = [make_storage_node() for _ in range(5)]
         for node in nodes:
             proto.storage.set(node)
@@ -359,8 +335,8 @@ class TestKademliaProtocol:
         result = proto.rpc_find_value(sender, sender.key, nodes[1].key)
         assert result["value"] == nodes[1]
 
-    def test_find_value_return_empty(self, make_fake_protocol, make_network_node):
-        proto = make_fake_protocol()
+    def test_find_value_return_empty(self, make_proto, make_network_node):
+        proto = make_proto()
         sender = make_network_node()
         result = proto.rpc_find_value(sender, sender.key, "notExists")
         assert result == []

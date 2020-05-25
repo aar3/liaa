@@ -6,8 +6,8 @@ import pickle
 from liaa import __version__
 from liaa.crawler import NodeSpiderCrawl, ValueSpiderCrawl
 from liaa.node import Node, NetworkNode, StorageNode
-from liaa.protocol import KademliaProtocol, HttpInterface
-from liaa.storage import StorageIface
+from liaa.protocol import KademliaProtocol
+from liaa.storage import EphemeralStorage
 from liaa.utils import join_addr
 
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -36,8 +36,8 @@ class Server:
 				The alpha parameter from the paper (default = 3)
 		"""
         self.node = NetworkNode(key=join_addr((interface, port)))
-        log.info("Using storage interface: %s", StorageIface.__name__)
-        self.storage = StorageIface(self.node)
+        log.info("Using storage interface: %s", EphemeralStorage.__name__)
+        self.storage = EphemeralStorage(self.node)
         self.ksize = ksize
         self.alpha = alpha
         self.refresh_interval = kwargs.get("refresh_interval")

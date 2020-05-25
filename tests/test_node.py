@@ -4,7 +4,6 @@ from liaa.utils import hex_to_int, pack
 
 
 class TestNode:
-    # pylint: disable=no-self-use
     def test_peer_node(self):
         node = NetworkNode(key="127.0.0.1:8080")
         assert isinstance(node, NetworkNode)
@@ -44,7 +43,6 @@ class TestNode:
 
 
 class TestNodeHeap:
-    # pylint: disable=no-self-use
     def test_can_create_nodeheap(self, make_network_node):
         heap = NodeHeap(make_network_node(), 2)
         assert isinstance(heap, NodeHeap)

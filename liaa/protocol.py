@@ -4,12 +4,13 @@ import hashlib
 import logging
 import sys
 import os
-import json
 import random
+from typing import Any, List, Tuple, Dict, Union, Callable, Optional
 
-import umsgpack
+import umsgpack  # type: ignore
 
 from liaa.node import Node, NetworkNode, StorageNode
+from liaa.storage import EphemeralStorage
 from liaa.routing import RoutingTable
 from liaa import __version__
 from liaa.utils import join_addr
@@ -27,8 +28,11 @@ class MalformedMessage(Exception):
     pass
 
 
+TResponse = Tuple[bool, Union[List[Tuple[int, str, int]], Dict[str, Any]]]
+
+
 class RPCFindResponse:
-    def __init__(self, response):
+    def __init__(self, response: TResponse):
         """
 		RPCFindResponse
 
@@ -43,7 +47,7 @@ class RPCFindResponse:
 		"""
         self.response = response
 
-    def did_happen(self):
+    def did_happen(self) -> bool:
         """
 		Did the other host actually respond?
 
@@ -54,7 +58,7 @@ class RPCFindResponse:
 		"""
         return self.response[0]
 
-    def has_value(self):
+    def has_value(self) -> bool:
         """
 		Return whether or not the response has a value
 
@@ -65,33 +69,36 @@ class RPCFindResponse:
 		"""
         return isinstance(self.response[1], dict)
 
-    def get_value(self):
+    def get_value(self) -> bytes:
         """
 		Get the value/payload from a response that contains a value
 
 		Returns
 		-------
-			Any:
+			bytes:
 				Value of the response payload
 		"""
-        return self.response[1]["value"]
+        if isinstance(self.response[1], dict):
+            return self.response[1]["value"]
 
-    def get_node_list(self):
+        raise NotImplementedError
+
+    def get_node_list(self) -> List[NetworkNode]:
         """
 		Get the node list in the response.  If there's no value, this should
 		be set.
 
 		Returns
 		-------
-			List["Node"]:
+			List[NetworkNode]
 				List of nodes returned from find response
 		"""
         nodelist = self.response[1] or []
-        return [Node(key=node[0]) for node in nodelist]
+        return [NetworkNode(*opt) for opt in nodelist]
 
 
 class RPCDatagramProtocol(asyncio.DatagramProtocol):
-    def __init__(self, source_node, wait=5):
+    def __init__(self, source_node: NetworkNode, wait: int = 5):
         """
 		RPCDatagramProtocol
 
@@ -107,22 +114,24 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
         self.source_node = source_node
         self._wait = wait
-        self._queue = {}
-        self.transport = None
+        self.index: Dict[bytes, Tuple[asyncio.Future, asyncio.Handle]] = {}
+        self.transport: Optional[asyncio.BaseTransport] = None
 
-    def connection_made(self, transport):
+    def connection_made(self, transport: asyncio.BaseTransport):
         """
-		Called when a connection is made. (overload from BaseProtocol)
+		Called when a connection is made. (is actually an asyncio.DatagramTransport)
+
+		Overload
 
 		Parameters
 		----------
-			transport: asyncio.Handle
+			transport: asyncio.BaseTransport
 				The transport representing the connection. The protocol is
 				responsible for storing the reference to its transport
 		"""
         self.transport = transport
 
-    def datagram_received(self, data, addr):
+    def datagram_received(self, data: bytes, addr: Tuple[str, int]):
         """
 		Called when a datagram is received.
 
@@ -141,19 +150,18 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
         )
         asyncio.ensure_future(self._solve_dgram(data, addr))
 
-    async def _solve_dgram(self, buff, address):
+    async def _solve_dgram(self, byte_arr: bytes, address: Tuple[str, int]):
         """
 		Responsible for processing an incoming datagram
 
 		Parameters
 		----------
-			buff: bytes
+			byte_arr: bytes
 				Data to be processed
-			address: Tuple
+			address: Tuple[str, int]
 				Address of sending peer
 		"""
-        if len(buff) < 22:
-            # pylint: disable=bad-continuation
+        if len(byte_arr) < 22:
             log.warning(
                 "%s received invalid dgram from %s, ignoring",
                 str(self.source_node),
@@ -161,34 +169,33 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
             )
             return
 
-        if buff[:1] == Header.Request:
-            asyncio.ensure_future(self._accept_request(buff, address))
-        elif buff[:1] == Header.Response:
-            self._accept_response(buff, address)
+        if byte_arr[:1] == Header.Request:
+            asyncio.ensure_future(self._accept_request(byte_arr, address))
+        elif byte_arr[:1] == Header.Response:
+            self._accept_response(byte_arr, address)
         else:
             log.debug("Received unknown message from %s, ignoring", address)
 
-    def _accept_response(self, buff, address):
+    def _accept_response(self, byte_arr: bytes, address: Tuple[str, int]):
         """
 		Processor for incoming responses
 
 		Parameters
 		----------
-			buff: bytes
+			byte_arr: bytes
 				Datagram representing incoming message from peer
-			address: Tuple
+			address: Tuple[str, int]
 				Address of peer receiving response
 		"""
-        idf, data = buff[1:21], umsgpack.unpackb(buff[21:])
+        idf, data = byte_arr[1:21], umsgpack.unpackb(byte_arr[21:])
         msgargs = (base64.b64encode(idf), address)
 
-        if not idf in self._queue:
+        if not idf in self.index:
             log.warning(
                 "%s could not mark datagram %s as received", str(self.source_node), idf
             )
             return
 
-        # pylint: disable=bad-continuation
         log.debug(
             "%s %iB response for message id %s from %s",
             str(self.source_node),
@@ -197,26 +204,27 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
             join_addr(msgargs[1]),
         )
 
-        fut, timeout = self._queue[idf]
+        fut, timeout = self.index[idf]
         fut.set_result((True, data))
         timeout.cancel()
-        del self._queue[idf]
 
-    async def _accept_request(self, buff, address):
+        del self.index[idf]
+
+    async def _accept_request(self, byte_arr: bytes, address: Tuple[str, int]):
         """
 		Process an incoming request datagram as well as its RPC response
 
 		Parameters
 		----------
-			buff: bytes
+			byte_arr: bytes
 				Datagram representing incoming message from peer
-			address: Tuple
+			address: Tuple[str, int]
 				Address of sender
 		"""
-        idf, data = buff[1:21], umsgpack.unpackb(buff[21:])
+        idf, data = byte_arr[1:21], umsgpack.unpackb(byte_arr[21:])
         funcname, args = data
 
-        # basically, when we execute an operation such as protocol.ping(), we will
+        # when we execute an operation such as protocol.ping(), we will
         # send 'ping' as the function name, at which point, we concat 'rpc_' onto
         # the function name so that when we call getattr(self, funcname) we will
         # get the rpc version of the fucname
@@ -232,7 +240,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 
         response = await func(address, *args)
         txdata = Header.Response + idf + umsgpack.packb(response)
-        # pylint: disable=bad-continuation
+
         log.debug(
             "%s sending %iB response for msg id %s to %s",
             str(self.source_node),
@@ -240,9 +248,9 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
             base64.b64encode(idf),
             join_addr(address),
         )
-        self.transport.sendto(txdata, address)
+        self.transport.sendto(txdata, address)  # type: ignore
 
-    def _timeout(self, msg_id):
+    def _timeout(self, msg_id: bytes):
         """
 		Make a given datagram timeout
 
@@ -253,10 +261,10 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
         args = (base64.b64encode(msg_id), self._wait)
         log.error("Did not received reply for msg id %s within %i seconds", *args)
-        self._queue[msg_id][0].set_result((False, None))
-        del self._queue[msg_id]
+        self.index[msg_id][0].set_result((False, None))
+        del self.index[msg_id]
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Callable[..., asyncio.Future]:
 
         if name.startswith("_") or name.startswith("rpc_"):
             return getattr(super(), name)
@@ -268,7 +276,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
             pass
 
         # here we define a catchall function that creates a request using a given
-        # function name and *args. these *args are sent and pushed to the msg queue
+        # function name and *args. these *args are sent and pushed to the msg index
         # as futures. this closure being called means that we are trying to execute
         # a function name that is not part of the base Kademlia rpc_* protocol
         def func(address, *args):
@@ -288,163 +296,20 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
                 join_addr(address),
                 base64.b64encode(msg_id),
             )
-            self.transport.sendto(txdata, address)
+            self.transport.sendto(txdata, address)  # type: ignore
 
             # we assume python version >= 3.7
             loop = asyncio.get_event_loop()
             future = loop.create_future()
             timeout = loop.call_later(self._wait, self._timeout, msg_id)
-            self._queue[msg_id] = (future, timeout)
+            self.index[msg_id] = (future, timeout)
             return future
 
         return func
 
 
-class HttpInterface(asyncio.Protocol):
-    def __init__(self, source_node, storage, wait=5):
-        """
-		HttpInterface
-
-		Public interface for storing data and fetching data on this server
-
-		Parameters
-		----------
-			source_node: NetworkNode
-				Our node (representing the current machine)
-			storage: BaseStorage
-				Storage interface
-			wait: int
-				Timeout of requests
-		"""
-        self.source_node = source_node
-        self.storage = storage
-        self.wait = wait
-        self.transport = None
-
-    def connection_made(self, transport):
-        """
-		Called when a connection is made. (overload from BaseProtocol)
-
-		Parameters
-		----------
-			transport: asyncio.Handle
-				The transport representing the connection. The protocol is
-				responsible for storing the reference to its transport
-		"""
-        self.transport = transport
-
-    def data_received(self, data):
-        """
-		Called when in an incoming stream is received.
-
-		Parameters
-		----------
-			data: bytes
-				object containing the incoming data.
-		"""
-        asyncio.ensure_future(self._handle_data(data))
-
-    async def _handle_data(self, buff):
-        """
-		Process the incoming stream
-
-		Parameters
-		----------
-			buff: bytes
-				The buffered stream to be process
-		"""
-        data = buff.decode()
-        rawheaders, rawbody = data.split("\r\n\r\n")
-        unmarshalled = json.loads(rawbody)
-
-        log.debug("Received new http message %s", data)
-
-        if rawheaders.startswith("GET"):
-            response = self.fetch_data(unmarshalled.get("key"))
-        elif rawheaders.startswith("PUT"):
-            response = self.call_store(unmarshalled.get("key"), rawbody)
-        else:
-            body = json.dumps({"details": "Not implemented"})
-            response = self.pack_response(501, "NOT IMPLEMENTED", body)
-
-        self.transport.write(response.encode())
-        self.transport.close()
-
-    def call_store(self, key, payload):
-        """
-		Given a payload, save it to storage
-
-		Parameters
-		----------
-			payload: Optional[bytes]
-				Data to be saved
-
-		Returns
-		-------
-			str:
-				Response to write to client
-		"""
-        node = StorageNode(key, payload)
-        self.storage.set(node)
-        return self.pack_response(200, "OK", json.dumps({"details": "ok"}))
-
-    def fetch_data(self, key):
-        """
-		Given a key, return the its value, if we have the key in storage
-
-		Parameters
-		----------
-			key: Optional[str]
-				Hexkey of the resource to be found
-
-		Returns
-		-------
-			str:
-				Response to write to client
-		"""
-        node = self.storage.get(key)
-        # pylint: disable=bad-continuation
-        if node:
-            return self.pack_response(
-                200, "OK", json.dumps({"details": "found", "data": str(node)})
-            )
-        return self.pack_response(
-            404, "NOT FOUND", json.dumps({"details": "not found"})
-        )
-
-    # pylint: disable=no-self-use
-    def pack_response(self, code, msg, body):
-        """
-		Pack a response's parts into an HTTP message
-
-		Parameters
-		----------
-			code: int
-				Response status code
-			msg: str
-				Response status message
-			body: Dict[str, str]
-				Marshalled body payload
-
-		Returns
-		-------
-			str:
-				String-formatted response
-		"""
-        # pylint: disable=bad-continuation
-        headers = [
-            f"HTTP/1.1 {msg} {code}",
-            f"User-Agent: Liaa.{__version__}",
-            "Accept: */*",
-            f"Content-Length: {len(body)}",
-            f"Content-Type: application/x-www-form-urlencoded",
-        ]
-
-        return "\r\n".join(headers) + "\r\n\r\n" + body
-
-
 class KademliaProtocol(RPCDatagramProtocol):
-    def __init__(self, source_node, storage, ksize):
+    def __init__(self, source_node: NetworkNode, storage: EphemeralStorage, ksize: int):
         """
 		KadmeliaProtocol
 
@@ -456,7 +321,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		----------
 			source_node: NetworkNode
 				Our node (representing the current machine)
-			storage: BaseStorage
+			storage: EphemeralStorage
 				Storage interface
 			ksize: int
 				Size of kbuckets
@@ -466,23 +331,22 @@ class KademliaProtocol(RPCDatagramProtocol):
         self.storage = storage
         self.source_node = source_node
 
-    def get_refresh_ids(self):
+    def get_refresh_ids(self) -> List[Node]:
         """
 		Get random node ids for buckets that haven't been updated in an hour
 
 		Returns
 		-------
-			ids: List[int]
+			ids: List[NetworNode]
 				Key ids of buckets that have not been updated since 3600
 		"""
-        ids = []
+        ids: List[Node] = []
         for bucket in self.router.lonely_buckets():
-            rid = random.choice(bucket.get_nodes())
+            rid = random.choice(bucket.get_set())
             ids.append(rid)
         return ids
 
-    # pylint: disable=no-self-use
-    def rpc_stun(self, sender):
+    def rpc_stun(self, sender: NetworkNode) -> NetworkNode:
         """
 		Execute a S.T.U.N procedure on a given sender
 
@@ -498,7 +362,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		"""
         return sender
 
-    def rpc_ping(self, sender, node_id):
+    def rpc_ping(self, sender: Tuple[str, int], node_id: str) -> str:
         """
 		Accept an incoming request from sender and return sender's ID
 		to indicate a successful ping
@@ -513,7 +377,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		Returns
 		-------
 			str:
-				ID of requesting node
+				key id of requesting node
 		"""
         source = NetworkNode(node_id)
         log.debug("%s got ping request from %s", self.source_node, join_addr(sender))
@@ -521,16 +385,14 @@ class KademliaProtocol(RPCDatagramProtocol):
         return self.source_node.key
 
     # pylint: disable=unused-argument
-    def rpc_store(self, sender, node_id, key, value):
+    def rpc_store(self, sender: NetworkNode, key: str, value: bytes) -> bool:
         """
 		Store data from a given sender
 
 		Parameters
 		----------
-			sender
+			sender: NetworkNode
 				Node that is initiating/requesting store
-			node_id: str
-				ID of node that is initiating/requesting store
 			key: str
 				ID of resource to be stored
 			value: bytes
@@ -541,18 +403,16 @@ class KademliaProtocol(RPCDatagramProtocol):
 			bool:
 				Indicator of successful operation
 		"""
-        source = NetworkNode(join_addr(sender))
-        self.welcome_if_new(source)
-        # pylint: disable=bad-continuation
+        self.welcome_if_new(sender)
         log.debug(
             "%s got store request from %s, storing %iB at %s",
             self.source_node,
-            join_addr(sender),
+            sender.key,
             len(value),
             key,
         )
-        resource = StorageNode(key, value)
-        self.storage.set(resource)
+        node = StorageNode(key, value)
+        self.storage.set(node)
         return True
 
     def rpc_find_node(self, sender, node_id, key):
