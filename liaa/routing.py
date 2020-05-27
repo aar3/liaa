@@ -13,7 +13,7 @@ from liaa.utils import shared_prefix, bytes_to_bits
 from liaa.node import Node
 
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+log = logging.getLogger(__name__)
 
 
 class LRU:

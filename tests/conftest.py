@@ -5,7 +5,7 @@ import pytest
 
 from liaa import MAX_LONG
 from liaa.server import Server
-from liaa.node import NetworkNode, StorageNode
+from liaa.node import PingNode, IndexNode
 from liaa.protocol import KademliaProtocol, Header
 from liaa.routing import RoutingTable, KBucket, LRU
 from liaa.storage import EphemeralStorage
@@ -33,7 +33,7 @@ def make_network_node():
 		Make a peer node.  Created a random id if not specified.
 		"""
         key = key or "0.0.0.0:" + str(random.randint(1000, 9000))
-        return NetworkNode(key)
+        return PingNode(key)
 
     return _make_network_node
 
@@ -58,7 +58,7 @@ def make_storage_node():
 		"""
         key = key or rand_str(10)
         value = value or rand_str(10).encode("utf-8")
-        return StorageNode(key, value)
+        return IndexNode(key, value)
 
     return _make_storage_node
 

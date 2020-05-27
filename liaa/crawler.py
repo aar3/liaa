@@ -1,16 +1,26 @@
 import logging
-from collections import Counter
+import collections
+
+from _typing import *
 
 from liaa.utils import gather_dict
-from liaa.node import NodeHeap
-from liaa.protocol import RPCFindResponse
+from liaa.node import NodeHeap, N, PingNode
+from liaa.protocol import RPCFindResponse, KademliaProtocol
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+log = logging.getLogger(__name__)
 
 
 # pylint: disable=too-few-public-methods
 class SpiderCrawl:
-    def __init__(self, protocol, node, peers, ksize, alpha):
+    def __init__(
+        self,
+        protocol: KademliaProtocol,
+        node: N,
+        peers: List[N],
+        ksize: int,
+        alpha: int,
+    ):
         """
 		The C{SpiderCrawl}er is a base class that is responsible for bootstrapping
 		various sub-classes (sub-crawlers) with a list of necessary functions,
@@ -20,9 +30,9 @@ class SpiderCrawl:
 		-----------
 			protocol: KademliaProtocol
 				A (kademlia) protocol instance.
-			node: Node
+			node: N
 				representing the key we're looking for
-			peers: List[Node]
+			peers: List[N]
 				A list of instances that provide the entry point for the network
 			ksize: int
 				The value for k based on the paper
@@ -34,19 +44,19 @@ class SpiderCrawl:
         self.alpha = alpha
         self.node = node
         self.nearest = NodeHeap(self.node, self.ksize)
-        self.last_ids_crawled = []
+        self.last_ids_crawled: List[str] = []
         self.nearest.push(peers)
 
         log.info("%s creating spider with %i peers", self.node, len(peers))
 
-    async def _find(self, rpcmethod):
+    async def _find(self, rpcmethod: F):
         """
 		Make a either a call_find_value or call_find_node rpc to our nearest
 		neighbors in attempt to find some node
 
 		Parameters
 		-----------
-			rpcmethod: asyncio.Handle
+			rpcmethod: F
 				The protocol's call_find_value or call_find_node method
 
 		The process:
@@ -60,10 +70,9 @@ class SpiderCrawl:
 
 		Returns
 		-------
-			asyncio.Future:
+			Future:
 				_nodes_found callback, which should be overloaded in sub-classes
 		"""
-        # pylint: disable=bad-continuation
         log.info(
             "%s making find with %s on nearest: %s",
             self.node,
@@ -75,12 +84,12 @@ class SpiderCrawl:
             count = len(self.nearest)
         self.last_ids_crawled = self.nearest.get_ids()
 
-        dicts = {}
+        dicts: Dict[str, Awaitable[Any]] = {}
+
         for node in self.nearest.get_uncontacted()[:count]:
-            if not node.is_peer_node():
-                # pylint: disable=bad-continuation
+            if isinstance(node, PingNode):
                 log.warning(
-                    "Will not execute %s on %s %s",
+                    "Will not execute %s on %s peer node %s",
                     rpcmethod.__name__,
                     node.__class__.__name__,
                     str(node),
@@ -88,10 +97,11 @@ class SpiderCrawl:
                 return
             dicts[node.key] = rpcmethod(node, self.node)
             self.nearest.mark_contacted(node)
+
         found = await gather_dict(dicts)
         return await self._nodes_found(found)
 
-    async def _nodes_found(self, responses):
+    async def _nodes_found(self, responses: KeyValueResponse):
         """
 		A callback to execute once nodes are found via _find
 		"""
@@ -100,7 +110,14 @@ class SpiderCrawl:
 
 class ValueSpiderCrawl(SpiderCrawl):
     # pylint: disable=bad-continuation
-    def __init__(self, protocol, node, peers, ksize, alpha):
+    def __init__(
+        self,
+        protocol: KademliaProtocol,
+        node: N,
+        peers: List[N],
+        ksize: int,
+        alpha: int,
+    ):
         """
 		The C{ValueCrawl}er is basically responsible for executing recursive calls
 		to our _find method, which searches our nearest nodes (and the nearest nodes
@@ -113,9 +130,9 @@ class ValueSpiderCrawl(SpiderCrawl):
 		----------
 			protocol: KademliaProtocol
 				A (kademlia) protocol instance.
-			node: StorageNode
+			node: N
 				representing the key we're looking for
-			peers: List[Node]
+			peers: List[N]
 				A list of instances that provide the entry point for the network
 			ksize: int
 				The value for k based on the paper
@@ -135,14 +152,16 @@ class ValueSpiderCrawl(SpiderCrawl):
 
 		Returns
 		-------
-			asyncio.Future:
+			Future:
 				(1) _find, if we did not find key, but have peers left to search
 				(2) None, if we've searched all peers without finding key
 				(3) _handle_found_values, if we found values related to our key
 		"""
         return await self._find(self.protocol.call_find_value)
 
-    async def _nodes_found(self, responses):
+    async def _nodes_found(
+        self, responses: KeyValueResponse
+    ) -> Optional[Future]:
         """
 		Recursively execute a _find and handle all returned values. These values
 		can be nodes representing closer nodes to our eventual destination as well
@@ -150,23 +169,23 @@ class ValueSpiderCrawl(SpiderCrawl):
 
 		Parameters
 		----------
-			responses: List[Tuple[bool, Union[List[Tuple[int, str, int]], Dict[str, Any]]]]
+			responses: KeyValueResponse
 				Responses from _find
 
 		Returns
 		-------
-			Optional[asyncio.Future]
+			Optional[Future]
 				Which can be either:
 					(1) a recursive call to _find if we have more searching to do
 					(2) None, if we've exhausted our search without finding our key
 					(3) A call to _handle_found_values if we've found values
 		"""
-        to_remove = []
-        found_values = []
+        to_remove: List[str] = []
+        found_values: List[bytes] = []
+
         for peer_id, response in responses.items():
             response = RPCFindResponse(response)
             if not response.did_happen():
-
                 # if we did not get a response from the peer in question,
                 # we need to remove this peer from our nearest as a way of
                 # pruning the network (nodes that don't have resources get
@@ -202,9 +221,9 @@ class ValueSpiderCrawl(SpiderCrawl):
         # or from have_contacted_all
         return await self.find()
 
-    async def _handle_found_values(self, values):
+    async def _handle_found_values(self, values: List[bytes]) -> Any:
         """
-		We got some values!  Exciting.  But let's make sure they're all the
+		We got some values!  Exciting. But let's make sure they're all the
 		same or freak out a little bit.  Also, make sure we tell the nearest
 		node that *didn't* have the value to store it.
 
@@ -214,7 +233,7 @@ class ValueSpiderCrawl(SpiderCrawl):
 
 		Parameters
 		----------
-			values: List[str]
+			values: List[bytes]
 				Values returned from recursive _find operation
 
 		Returns
@@ -222,9 +241,11 @@ class ValueSpiderCrawl(SpiderCrawl):
 			value: Any
 				Original value that we were searching for
 		"""
-        value_counts = Counter(values)
+        value_counts = collections.Counter(values)
         if len(value_counts) != 1:
             log.warning("%s multiple values for %s", self.node, str(values))
+
+        # the most common value's key
         value = value_counts.most_common(1)[0][0]
 
         peer = self.nearest_without_value.popleft()
@@ -240,37 +261,33 @@ class ValueSpiderCrawl(SpiderCrawl):
 
 
 class NodeSpiderCrawl(SpiderCrawl):
-    async def find(self):
+    async def find(self) -> Future:
         """
 		A wrapper for the base class's _find, where we attempt to find the
 		closest node requested using the protocols call_find_node rpc method
 
 		Returns
 		-------
-			Callable[[Callable[None, Any]], Any]:
-				Where Any is either:
-					(1) A recursive call to _find
-					(2) A call to _nodes_found
-					(3) None, if we've searched all peers without finding key
+		    Future:
 		"""
         return await self._find(self.protocol.call_find_node)
 
-    async def _nodes_found(self, responses):
+    async def _nodes_found(self, responses: List[Response]) -> Future:
         """
 		Handle the result of an iteration in _find.
 
 		Parameters
 		----------
-			responses: Any
+			responses: List[Response]
 				Responses received from peer nodes via NodeCrawl execution
 
 			Where Any can include:
-				List[Tuple[str, str, int]] representing peer nodes
-				Dict[str, Any] representing found values
+				List[PeerInfoResponse] representing peer nodes
+				KeyValueResponse representing found values
 
 		Returns
 		-------
-			asyncio.Future:
+			Future:
 				Recursive call to _find
 		"""
         toremove = []

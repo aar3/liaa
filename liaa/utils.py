@@ -111,7 +111,7 @@ def reverse_hex(number: int, base: int = BASE_INT):
     def _reverse_hex(number: int, base: int):
         if number < 0:
             return "-" + _reverse_hex(-number, base)
-        # pylint: disable=invalid-name
+
         (d, m) = divmod(number, base)
         if d > 0:
             return _reverse_hex(d, base) + digit_to_char(m)

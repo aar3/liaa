@@ -43,7 +43,7 @@ class TestUtils:
         assert hex_to_int(num_as_bytes.hex()) == num
 
     def test_check_dht_value_type_returns_true_when_arg_is_valid(self):
-        # pylint: disable=invalid-name
+
         a = check_dht_value_type("foo")
         assert a
 

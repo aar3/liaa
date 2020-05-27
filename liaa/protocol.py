@@ -9,13 +9,13 @@ from typing import Any, List, Tuple, Dict, Union, Callable, Optional
 
 import umsgpack  # type: ignore
 
-from liaa.node import Node, NetworkNode, StorageNode
+from liaa.node import Node, PingNode, IndexNode
 from liaa.storage import EphemeralStorage
 from liaa.routing import RoutingTable
 from liaa import __version__
 from liaa.utils import join_addr
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+log = logging.getLogger(__name__)
 
 
 # pylint: disable=too-few-public-methods
@@ -83,22 +83,22 @@ class RPCFindResponse:
 
         raise NotImplementedError
 
-    def get_node_list(self) -> List[NetworkNode]:
+    def get_node_list(self) -> List[PingNode]:
         """
 		Get the node list in the response.  If there's no value, this should
 		be set.
 
 		Returns
 		-------
-			List[NetworkNode]
+			List[PingNode]
 				List of nodes returned from find response
 		"""
         nodelist = self.response[1] or []
-        return [NetworkNode(*opt) for opt in nodelist]
+        return [PingNode(*opt) for opt in nodelist]
 
 
 class RPCDatagramProtocol(asyncio.DatagramProtocol):
-    def __init__(self, source_node: NetworkNode, wait: int = 5):
+    def __init__(self, source_node: PingNode, wait: int = 5):
         """
 		RPCDatagramProtocol
 
@@ -107,7 +107,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 
 		Parameters
 		----------
-			source_node: NetworkNode
+			source_node: PingNode
 				Node on which this protocol is running
 			wait: int
 				Network connection timeout (default=5)
@@ -309,7 +309,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 
 
 class KademliaProtocol(RPCDatagramProtocol):
-    def __init__(self, source_node: NetworkNode, storage: EphemeralStorage, ksize: int):
+    def __init__(self, source_node: PingNode, storage: EphemeralStorage, ksize: int):
         """
 		KadmeliaProtocol
 
@@ -319,7 +319,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 		Parameters
 		----------
-			source_node: NetworkNode
+			source_node: PingNode
 				Our node (representing the current machine)
 			storage: EphemeralStorage
 				Storage interface
@@ -346,18 +346,18 @@ class KademliaProtocol(RPCDatagramProtocol):
             ids.append(rid)
         return ids
 
-    def rpc_stun(self, sender: NetworkNode) -> NetworkNode:
+    def rpc_stun(self, sender: PingNode) -> PingNode:
         """
 		Execute a S.T.U.N procedure on a given sender
 
 		Parameters
 		----------
-			sender: NetworkNode
+			sender: PingNode
 				Requesting node
 
 		Returns
 		-------
-			sender: NetworkNode
+			sender: PingNode
 				Requesting node
 		"""
         return sender
@@ -379,19 +379,19 @@ class KademliaProtocol(RPCDatagramProtocol):
 			str:
 				key id of requesting node
 		"""
-        source = NetworkNode(node_id)
+        source = PingNode(node_id)
         log.debug("%s got ping request from %s", self.source_node, join_addr(sender))
         self.welcome_if_new(source)
         return self.source_node.key
 
     # pylint: disable=unused-argument
-    def rpc_store(self, sender: NetworkNode, key: str, value: bytes) -> bool:
+    def rpc_store(self, sender: PingNode, key: str, value: bytes) -> bool:
         """
 		Store data from a given sender
 
 		Parameters
 		----------
-			sender: NetworkNode
+			sender: PingNode
 				Node that is initiating/requesting store
 			key: str
 				ID of resource to be stored
@@ -411,7 +411,7 @@ class KademliaProtocol(RPCDatagramProtocol):
             len(value),
             key,
         )
-        node = StorageNode(key, value)
+        node = IndexNode(key, value)
         self.storage.set(node)
         return True
 
@@ -421,7 +421,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 		Parameters
 		----------
-			sender: NetworkNode
+			sender: PingNode
 				The node initiating the request
 			node_id: str
 				Node key of the node initiating the request
@@ -434,7 +434,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 			which will be either Tuple[str, str, int] if node is a peer or,
 			Tuple[str, None, Optional[bytes]] if node is resource
 		"""
-        source = NetworkNode(node_id)
+        source = PingNode(node_id)
         log.info("%s finding neighbors of %s in local table", self.source_node, source)
         self.welcome_if_new(source)
         node = Node(key)
@@ -449,7 +449,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 		Parameters
 		----------
-			sender: NetworkNode
+			sender: PingNode
 				Node at which key is stored
 			node_id: str
 				Key ID of node at which key is stored
@@ -463,7 +463,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 				found, or will recursively attempt to find node at which key is
 				stored via calls to `rpc_find_node`
 		"""
-        source = NetworkNode(node_id)
+        source = PingNode(node_id)
         self.welcome_if_new(source)
         value = self.storage.get(key)
         if value is None:
@@ -476,7 +476,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 		Parameters
 		----------
-			to_ask: NetworkNode
+			to_ask: PingNode
 				Node to ask regarding to_find
 			to_find: Node
 				Node that this call is attempting to find
@@ -496,7 +496,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 		Parameters
 		----------
-			to_ask: NetworkNode
+			to_ask: PingNode
 				Node to ask in order to find to_find to retrieve a given value
 			to_find: Node
 				Node that this call is attempting to find
@@ -517,7 +517,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 		Parameters
 		----------
-			to_ask: NetworkNode
+			to_ask: PingNode
 				Node at which to send ping request
 
 		Returns
@@ -535,7 +535,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 		Parameters
 		----------
-			to_ask: NetworkNode
+			to_ask: PingNode
 				Node which to ask to store a given key/value pair
 			key: str
 				ID of resource to store
@@ -566,11 +566,11 @@ class KademliaProtocol(RPCDatagramProtocol):
 
 		Parameters
 		----------
-			node: NetworkNode
+			node: PingNode
 				Node to add to routing table
 		"""
         # because we can only call_store on peers
-        if not self.router.is_new_node(node) or isinstance(node, StorageNode):
+        if not self.router.is_new_node(node) or isinstance(node, IndexNode):
             return
 
         log.info("%s welcoming new node %s", self.source_node, node)
@@ -601,7 +601,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		----------
 			result: Any
 				Could be the result of any rpc method
-			node: NetworkNode
+			node: PingNode
 				Node to which operation was sent
 
 		Returns

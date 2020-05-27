@@ -20,6 +20,7 @@ def fake_spider_crawler(node):
 
 
 class TestSpiderCrawl:
+    # pylint: disable=no-self-use
     def test_can_init_crawler(self, make_network_node):
         crawler = fake_spider_crawler(node=make_network_node())
         assert isinstance(crawler, SpiderCrawl)

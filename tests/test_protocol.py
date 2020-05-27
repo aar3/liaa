@@ -10,7 +10,7 @@ import umsgpack
 
 from liaa.protocol import KademliaProtocol, RPCDatagramProtocol, Header
 from liaa.routing import RoutingTable
-from liaa.node import Node, StorageNode
+from liaa.node import Node, IndexNode
 from liaa.storage import EphemeralStorage
 
 
@@ -179,7 +179,7 @@ class TestKademliaProtocol:
         self, make_proto, make_sandbox, make_basic_node, make_storage_node
     ):
         def welcome_if_new_stub(proto, node):
-            if not proto.router.is_new_node(node) or isinstance(node, StorageNode):
+            if not proto.router.is_new_node(node) or isinstance(node, IndexNode):
                 return
             for inode in proto.storage:
                 neighbors = proto.router.find_neighbors(inode)
@@ -218,7 +218,7 @@ class TestKademliaProtocol:
 
         def welcome_if_new_stub(proto, node):
             assert proto.router.is_new_node(node)
-            if not proto.router.is_new_node(node) or isinstance(node, StorageNode):
+            if not proto.router.is_new_node(node) or isinstance(node, IndexNode):
                 return
             for inode in proto.storage:
                 neighbors = proto.router.find_neighbors(inode)
@@ -270,7 +270,7 @@ class TestKademliaProtocol:
 
         def welcome_if_new_stub(proto, node):
             assert proto.router.is_new_node(node)
-            if not proto.router.is_new_node(node) or isinstance(node, StorageNode):
+            if not proto.router.is_new_node(node) or isinstance(node, IndexNode):
                 return
             for inode in proto.storage:
                 neighbors = proto.router.find_neighbors(inode)

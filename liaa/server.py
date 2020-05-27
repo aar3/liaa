@@ -5,12 +5,12 @@ import pickle
 
 from liaa import __version__
 from liaa.crawler import NodeSpiderCrawl, ValueSpiderCrawl
-from liaa.node import Node, NetworkNode, StorageNode
+from liaa.node import Node, PingNode, IndexNode
 from liaa.protocol import KademliaProtocol
 from liaa.storage import EphemeralStorage
 from liaa.utils import join_addr
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+log = logging.getLogger(__name__)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -35,7 +35,7 @@ class Server:
 			alpha: int
 				The alpha parameter from the paper (default = 3)
 		"""
-        self.node = NetworkNode(key=join_addr((interface, port)))
+        self.node = PingNode(key=join_addr((interface, port)))
         log.info("Using storage interface: %s", EphemeralStorage.__name__)
         self.storage = EphemeralStorage(self.node)
         self.ksize = ksize
@@ -106,25 +106,13 @@ class Server:
 		"""
         return self.protocol_class(self.node, self.storage, self.ksize)
 
-    def _create_http_iface(self):
-        """
-		Create an interface to accept incoming http messages
-
-		Returns
-		-------
-			HttpInterface:
-				Bootstrapped instance of an HttpInterface
-		"""
-        return HttpInterface(self.node, self.storage)
-
     async def listen(self):
         """
 		Create UDP and HTTP listeners on the server
 		"""
         loop = asyncio.get_event_loop()
-        # pylint: disable=bad-continuation
         listen = loop.create_datagram_endpoint(
-            self._create_protocol, local_addr=(self.node.ip, self.node.port)
+            self._create_protocol, local_addr=self.node.addr()
         )
         log.info("%s udp listening at udp://%s", self.node, self.node.key)
 
@@ -133,13 +121,6 @@ class Server:
         # schedule refreshing table
         self.refresh_table()
 
-        # pylint: disable=bad-continuation
-        self.listener = await loop.create_server(
-            self._create_http_iface,
-            host=self.node.ip,
-            port=self.node.port,
-            ssl=self._ssl_ctx,
-        )
         log.info("%s https listening at https://%s", self.node, self.node.key)
 
         asyncio.ensure_future(self.listener.serve_forever())
@@ -176,7 +157,7 @@ class Server:
         await asyncio.gather(*results)
 
         for data in self.storage.iter_older_than(20):
-            node = StorageNode(*data)
+            node = IndexNode(*data)
             log.debug("%s republishing node %s from store", self.node, node)
             await self.set_digest(node)
 
@@ -192,7 +173,7 @@ class Server:
 
 		Returns
 		-------
-			List[NetworkNode]:
+			List[PingNode]:
 				List of peers suitable for bootstrap use
 		"""
         neighbors = self.protocol.router.find_neighbors(self.node)
@@ -235,12 +216,12 @@ class Server:
 
 		Returns
 		-------
-			Optiona[NetworkNode]:
+			Optiona[PingNode]:
 				None if ping was unsuccessful, or peer as Node if ping
 				was successful
 		"""
         result = await self.protocol.ping(addr, self.node.key)
-        return NetworkNode(key=join_addr((addr[0], addr[1]))) if result[0] else None
+        return PingNode(key=join_addr((addr[0], addr[1]))) if result[0] else None
 
     async def get(self, key):
         """
@@ -265,7 +246,7 @@ class Server:
         if result is not None:
             return result
 
-        node = StorageNode(key, value=None)
+        node = IndexNode(key, value=None)
         nearest = self.protocol.router.find_neighbors(node)
 
         if not nearest:
@@ -342,10 +323,10 @@ class Server:
         fname = fname or self.statefile
         log.info("%s saving state to %s", self.node, fname)
 
-        # pylint: disable=bad-continuation
+        ip, port = self.node.addr()
         data = {
-            "interface": self.node.ip,
-            "port": self.node.port,
+            "interface": ip,
+            "port": port,
             "ksize": self.ksize,
             "alpha": self.alpha,
             "id": self.node.key,

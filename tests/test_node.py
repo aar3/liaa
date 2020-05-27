@@ -1,24 +1,22 @@
 from liaa import MAX_LONG
-from liaa.node import Node, NodeHeap, NetworkNode, StorageNode
+from liaa.node import Node, NodeHeap, PingNode, IndexNode
 from liaa.utils import hex_to_int, pack
 
 
 class TestNode:
     def test_peer_node(self):
-        node = NetworkNode(key="127.0.0.1:8080")
-        assert isinstance(node, NetworkNode)
-        assert node.ip == "127.0.0.1"
-        assert node.port == 8080
+        node = PingNode(key="127.0.0.1:8080")
+        assert isinstance(node, PingNode)
         assert node.digest == pack(node.key)
         assert node.long_id < MAX_LONG
-        assert str(node) == "NetworkNode@127.0.0.1:8080"
+        assert str(node) == "PingNode@127.0.0.1:8080"
 
     def test_resource_node(self):
-        node = StorageNode(key="my-node", value=b"123")
-        assert isinstance(node, StorageNode)
+        node = IndexNode(key="my-node", value=b"123")
+        assert isinstance(node, IndexNode)
         assert node.digest == pack(node.key)
         assert node.long_id < MAX_LONG
-        assert str(node) == "StorageNode@my-node"
+        assert str(node) == "IndexNode@my-node"
 
     def test_distance_calculation(self, make_network_node):
 

@@ -7,10 +7,10 @@ from collections import OrderedDict
 from itertools import takewhile
 from typing import List, Any, Tuple, Iterator, Optional, Dict
 
-from liaa.node import StorageNode, Node, NetworkNode
+from liaa.node import IndexNode, Node, PingNode
 
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+log = logging.getLogger(__name__)
 
 
 class BaseStorage(abc.ABC):
@@ -19,14 +19,14 @@ class BaseStorage(abc.ABC):
 
 	Parameters
 	----------
-		node: NetworkNode
+		node: PingNode
 			The node representing this peer
 		ttl: int
 			Max age that items can live untouched before being pruned
 			(default=604800 seconds = 1 week)
 	"""
 
-    def __init__(self, node: NetworkNode, ttl: int = 604800):
+    def __init__(self, node: PingNode, ttl: int = 604800):
         self.node = node
         self.ttl = ttl
         self.root_dir = os.path.join(os.path.expanduser("~"), ".liaa")
@@ -81,15 +81,15 @@ class BaseStorage(abc.ABC):
         return list(matches)
 
     @abc.abstractmethod
-    def get(self, key: str, default: Optional[StorageNode]) -> Optional[StorageNode]:
+    def get(self, key: str, default: Optional[IndexNode]) -> Optional[IndexNode]:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def set(self, node: StorageNode):
+    def set(self, node: IndexNode):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def remove(self, node: StorageNode):
+    def remove(self, node: IndexNode):
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -98,7 +98,7 @@ class BaseStorage(abc.ABC):
 
 
 class EphemeralStorage(BaseStorage):
-    def __init__(self, node: NetworkNode, ttl: int = 604800):
+    def __init__(self, node: PingNode, ttl: int = 604800):
         """
 		EphemeralStorage
 
@@ -108,11 +108,11 @@ class EphemeralStorage(BaseStorage):
 				The node representing this peer
 		"""
         super(EphemeralStorage, self).__init__(node, ttl)
-        self.data: Dict[str, StorageNode] = OrderedDict()
+        self.data: Dict[str, IndexNode] = OrderedDict()
 
     def get(
-        self, key: str, default: Optional[StorageNode] = None
-    ) -> Optional[StorageNode]:
+        self, key: str, default: Optional[IndexNode] = None
+    ) -> Optional[IndexNode]:
         """
 		Retrieve a node from storage
 
@@ -125,20 +125,20 @@ class EphemeralStorage(BaseStorage):
 
 		Return
 		-------
-			Optional[StorageNode]:
+			Optional[IndexNode]:
 				Node if node is in storage, else `default`
 		"""
         self.prune()
         log.debug("%s fetching Node %i", self.node, key)
         return self.data.get(key, default)
 
-    def set(self, node: StorageNode):
+    def set(self, node: IndexNode):
         """
 		Save a given Node in storage
 
 		Parameters
 		----------
-			node: StorageNode
+			node: IndexNode
 				Node to be saved
 		"""
         log.debug("%s setting node %s", self.node, node.long_id)
@@ -161,7 +161,7 @@ class EphemeralStorage(BaseStorage):
         if node in self:
             del self.data[node.key]
 
-    def _triple_iter(self) -> List[Tuple[str, StorageNode]]:
+    def _triple_iter(self) -> List[Tuple[str, IndexNode]]:
         """
 		Iterate over storage to return each contents key, time, and values
 		"""
