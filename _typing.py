@@ -1,30 +1,46 @@
+# pytlin: disable=unused-import
 from asyncio import (
     Handle,
     Future,
 )
 
+from mypy_extensions import VarArg
+
 from typing import (
     Union,
     Dict,
     List,
-    Any,
     Optional,
     Generic,
-    OrderedDict,
+    OrderedDict as TOrderedDict,
     Callable,
+    Coroutine,
     Iterator,
+    Generic,
+    Any,
     Tuple,
+    overload,
     Awaitable,
     TypeVar,
     Set,
-    Hashable
+    Hashable,
+    Type,
 )
 
 
-T = TypeVar("T", bound=Any)
-Function = Callable[..., Any]
+T = TypeVar("T")
+Function = Callable[..., T]
 F = TypeVar("F", bound=Function)
 
-KeyValueResponse = Dict[str, Any]
-PeerInfoResponse = Tuple[int, str, int]
-Response = Tuple[bool, Union[List[PeerInfoResponse], KeyValueResponse]]
+PingNodeInfo = Tuple[int, str, int]
+IndexNodeInfo = Tuple[str, Optional[bytes], float]
+IndexNodeAsDict = Dict[str, Optional[bytes]]
+GenericNodeInfo = Union[PingNodeInfo, IndexNodeInfo]
+
+ResponseIndexItem = Tuple[bool, Union[PingNodeInfo, IndexNodeAsDict]]
+ResponseIndex = Dict[str, ResponseIndexItem]
+
+TKademliaProtocol = Any
+
+ValueSpiderFindReturn = Union[Optional[bytes], ResponseIndexItem]
+NodeSpiderFindReturn = Union[GenericNodeInfo, ResponseIndexItem]

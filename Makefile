@@ -25,7 +25,7 @@ format:
 	python -m black liaa/*.py && python -m black tests/*.py
 
 typing:
-	python -m mypy liaa/*.py -v --disallow-any-explicit --disallow-untyped-defs --no-implicit-optional
+	python -m mypy liaa/*.py -v --disallow-untyped-defs --no-implicit-optional
 
 test:
-	python -m pytest -s tests/* --cov-report term --cov=./ -vx
+	python -m pytest -rsx tests/* --cov-report term --cov=./ -vx

@@ -1,3 +1,5 @@
+# pylint: dangerous-default-value
+
 import random
 import umsgpack
 
@@ -9,25 +11,26 @@ from liaa.node import PingNode, IndexNode
 from liaa.protocol import KademliaProtocol, Header
 from liaa.routing import RoutingTable, KBucket, LRU
 from liaa.storage import EphemeralStorage
+from liaa.crawler import SpiderCrawl, ValueSpiderCrawl, NodeSpiderCrawl
 from liaa.utils import rand_str
 
 
 # pylint: disable=redefined-outer-name
 @pytest.fixture()
-def make_basic_node(make_network_node, make_storage_node):
+def generic_node(ping_node, index_node):
     def _make_basic_node():
         """
 		Make a node.  Created a random id if not specified.
 		"""
         if random.choice([0, 1]) == 0:
-            return make_network_node()
-        return make_storage_node()
+            return ping_node()
+        return index_node()
 
     return _make_basic_node
 
 
 @pytest.fixture()
-def make_network_node():
+def ping_node():
     def _make_network_node(key=None):
         """
 		Make a peer node.  Created a random id if not specified.
@@ -51,7 +54,7 @@ def make_lru():
 
 
 @pytest.fixture()
-def make_storage_node():
+def index_node():
     def _make_storage_node(key=None, value=None):
         """
 		Make a resource node.  Created a random id if not specified.
@@ -64,16 +67,16 @@ def make_storage_node():
 
 
 @pytest.fixture()
-def make_storage(make_network_node):
+def storage(ping_node):
     def _make_storage(ttl=5, node=None):
-        node = node or make_network_node()
+        node = node or ping_node()
         return EphemeralStorage(node, ttl)
 
     return _make_storage
 
 
 @pytest.fixture()
-def make_kbucket():
+def kbucket():
     def _make_kbucket(ksize, low=0, high=MAX_LONG):
         """
 		Create a fake KBucket
@@ -91,12 +94,12 @@ class FakeProtocol(KademliaProtocol):  # pylint: disable=too-few-public-methods
 
 
 @pytest.fixture()
-def make_proto(make_network_node):
+def make_proto(ping_node):
     def _make_proto(node=None, ksize=20):
         """
 		Create a fake protocol
 		"""
-        node = node or make_network_node()
+        node = node or ping_node()
         return FakeProtocol(node, EphemeralStorage(node), ksize=ksize)
 
     return _make_proto
@@ -127,8 +130,8 @@ class FakeServer:
 
 
 @pytest.fixture
-def make_server(make_network_node):
-    return FakeServer(make_network_node())
+def make_server(ping_node):
+    return FakeServer(ping_node())
 
 
 @pytest.fixture
@@ -154,10 +157,39 @@ class Sandbox:
 
 
 @pytest.fixture
-def make_sandbox():
+def sandbox():
     def _make_sandbox(obj=None):
         if not obj:
-            raise RuntimeError("make_sandbox object cannot be None")
+            raise RuntimeError("sandbox object cannot be None")
         return Sandbox(obj)
 
     return _make_sandbox
+
+
+@pytest.fixture
+def fake_spider_crawler(generic_node):
+    def _make_fake_spider_crawler(node=None, peers=[]):
+        node = node or generic_node()
+        return SpiderCrawl(KademliaProtocol, node=node, peers=peers, ksize=3, alpha=3)
+
+    return _make_fake_spider_crawler
+
+
+@pytest.fixture
+def fake_node_crawler(generic_node):
+    def _make_fake_node_crawler(node=None, peers=[]):
+        node = node or generic_node()
+        return NodeSpiderCrawl(
+            KademliaProtocol, node=node, peers=peers, ksize=3, alpha=3
+        )
+
+    return _make_fake_node_crawler
+
+
+@pytest.fixture
+def fake_value_crawler(generic_node):
+    def _make_fake_value_crawler(node=None, peers=[]):
+        node = node or generic_node()
+        return ValueError(KademliaProtocol, node=node, peers=peers, ksize=3, alpha=3)
+
+    return _make_fake_value_crawler

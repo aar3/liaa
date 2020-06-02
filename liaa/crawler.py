@@ -4,7 +4,7 @@ import collections
 from _typing import *
 
 from liaa.utils import gather_dict
-from liaa.node import NodeHeap, N, PingNode
+from liaa.node import NodeHeap, GenericNode, PingNode, IndexNode
 from liaa.protocol import RPCFindResponse, KademliaProtocol
 
 
@@ -16,8 +16,8 @@ class SpiderCrawl:
     def __init__(
         self,
         protocol: KademliaProtocol,
-        node: N,
-        peers: List[N],
+        node: GenericNode,
+        peers: List[GenericNode],
         ksize: int,
         alpha: int,
     ):
@@ -30,9 +30,9 @@ class SpiderCrawl:
 		-----------
 			protocol: KademliaProtocol
 				A (kademlia) protocol instance.
-			node: N
+			node: GenericNode
 				representing the key we're looking for
-			peers: List[N]
+			peers: List[GenericNode]
 				A list of instances that provide the entry point for the network
 			ksize: int
 				The value for k based on the paper
@@ -49,7 +49,7 @@ class SpiderCrawl:
 
         log.info("%s creating spider with %i peers", self.node, len(peers))
 
-    async def _find(self, rpcmethod: F):
+    async def _find(self, rpcmethod: F) -> Optional[Union[ValueSpiderFindReturn, NodeSpiderFindReturn]]:
         """
 		Make a either a call_find_value or call_find_node rpc to our nearest
 		neighbors in attempt to find some node
@@ -70,7 +70,7 @@ class SpiderCrawl:
 
 		Returns
 		-------
-			Future:
+			Optional[ResponseIndexItem]:
 				_nodes_found callback, which should be overloaded in sub-classes
 		"""
         log.info(
@@ -87,34 +87,71 @@ class SpiderCrawl:
         dicts: Dict[str, Awaitable[Any]] = {}
 
         for node in self.nearest.get_uncontacted()[:count]:
-            if isinstance(node, PingNode):
-                log.warning(
-                    "Will not execute %s on %s peer node %s",
-                    rpcmethod.__name__,
-                    node.__class__.__name__,
-                    str(node),
-                )
-                return
+            if isinstance(node, IndexNode):
+                log.warning("Will not execute %s on %s", rpcmethod.__name__, str(node))
+                return None
+
             dicts[node.key] = rpcmethod(node, self.node)
             self.nearest.mark_contacted(node)
 
         found = await gather_dict(dicts)
-        return await self._nodes_found(found)
+        return await self._parse_response_results(found)
 
-    async def _nodes_found(self, responses: KeyValueResponse):
+    async def _parse_response_results(self, responses: ResponseIndex) -> None:
         """
 		A callback to execute once nodes are found via _find
 		"""
         raise NotImplementedError
 
 
+class NodeSpiderCrawl(SpiderCrawl):
+    async def find(self) -> Optional[NodeSpiderFindReturn]:
+        """
+		A wrapper for the base class's _find, where we attempt to find the
+		closest node requested using the protocols call_find_node rpc method
+
+		Returns
+		-------
+		    Optional[PingNodeInfo]
+		"""
+        return await self._find(self.protocol.call_find_node)  # type: ignore
+
+    async def _parse_response_results(self, responses: ResponseIndex) -> Optional[Union[GenericNode, ResponseIndexItem]]:  # type: ignore
+        """
+		Handle the result of an iteration in _find.
+
+		Parameters
+		----------
+			responses: ResponseIndex
+				Responses received from peer nodes via NodeCrawl execution
+
+		Returns
+		-------
+			Optional[Union[GenericNode, ResponseIndexItem]]:
+				Recursive call to _find or list of nearest nodes
+		"""
+        toremove = []
+        for peerid, response in responses.items():
+            fresponse = RPCFindResponse(response)
+            if not fresponse.did_happen() or not fresponse.has_response_item():
+                log.debug("%s encountered empty response, removing...", self.node)
+                toremove.append(peerid)
+            else:
+                self.nearest.push(fresponse.get_node_list())  # type: ignore
+        self.nearest.remove(toremove)
+
+        if self.nearest.has_exhausted_contacts():
+            log.debug("%s has contacted all nearest nodes", self.node)
+            return list(self.nearest)  # type: ignore
+        return await self.find()  # type: ignore
+
+
 class ValueSpiderCrawl(SpiderCrawl):
-    # pylint: disable=bad-continuation
     def __init__(
         self,
         protocol: KademliaProtocol,
-        node: N,
-        peers: List[N],
+        node: GenericNode,
+        peers: List[GenericNode],
         ksize: int,
         alpha: int,
     ):
@@ -130,9 +167,9 @@ class ValueSpiderCrawl(SpiderCrawl):
 		----------
 			protocol: KademliaProtocol
 				A (kademlia) protocol instance.
-			node: N
+			node: GenericNode
 				representing the key we're looking for
-			peers: List[N]
+			peers: List[GenericNode]
 				A list of instances that provide the entry point for the network
 			ksize: int
 				The value for k based on the paper
@@ -145,23 +182,21 @@ class ValueSpiderCrawl(SpiderCrawl):
         # section 2.3 so we can set the key there if found
         self.nearest_without_value = NodeHeap(self.node, 1)
 
-    async def find(self):
+    async def find(self) -> Optional[ValueSpiderFindReturn]:
         """
 		A wrapper for the base class's _find, where we attempt to find the
 		closest value requested using the protocols call_find_value rpc method
 
 		Returns
 		-------
-			Future:
+			Optional[ResponseIndexItem]:
 				(1) _find, if we did not find key, but have peers left to search
 				(2) None, if we've searched all peers without finding key
 				(3) _handle_found_values, if we found values related to our key
 		"""
-        return await self._find(self.protocol.call_find_value)
+        return await self._find(self.protocol.call_find_value)  # type: ignore
 
-    async def _nodes_found(
-        self, responses: KeyValueResponse
-    ) -> Optional[Future]:
+    async def _parse_response_results(self, responses: ResponseIndex) -> Optional[ValueSpiderFindReturn]:  # type: ignore
         """
 		Recursively execute a _find and handle all returned values. These values
 		can be nodes representing closer nodes to our eventual destination as well
@@ -169,59 +204,48 @@ class ValueSpiderCrawl(SpiderCrawl):
 
 		Parameters
 		----------
-			responses: KeyValueResponse
+			responses: ResponseIndex
 				Responses from _find
 
 		Returns
 		-------
-			Optional[Future]
+			Optional[ValueSpiderFindReturn]
 				Which can be either:
 					(1) a recursive call to _find if we have more searching to do
 					(2) None, if we've exhausted our search without finding our key
 					(3) A call to _handle_found_values if we've found values
 		"""
         to_remove: List[str] = []
-        found_values: List[bytes] = []
+        found_responses: List[IndexNodeAsDict] = []
 
         for peer_id, response in responses.items():
-            response = RPCFindResponse(response)
-            if not response.did_happen():
-                # if we did not get a response from the peer in question,
-                # we need to remove this peer from our nearest as a way of
-                # pruning the network (nodes that don't have resources get
-                # lower priority)
+
+            fresponse = RPCFindResponse(response)
+
+            if not fresponse.did_happen():
                 to_remove.append(peer_id)
-            elif response.has_value():
-
-                # if we found the value handle it accordingly
-                found_values.append(response.get_value())
+            elif fresponse.has_value():
+                found_responses.append(fresponse.item())  # type: ignore
+                self.nearest.push(fresponse.get_node_list())  # type: ignore
             else:
-
-                # if we got a response but did not find a value, keep note
-                # of this peer not having the value we're searching for, and
-                # add this peer's nearest peers to the current node's nearest peers
                 peer = self.nearest.get_node(peer_id)
-                self.nearest_without_value.push(peer)
-                self.nearest.push(response.get_node_list())
+                if peer:
+                    self.nearest_without_value.push([peer])
+                    # self.nearest.push(fresponse.get_node_list())
 
-        # prune our list of nearest nodes
         self.nearest.remove(to_remove)
 
-        # if our search returned values, handle them
-        if found_values:
-            return await self._handle_found_values(found_values)
+        if found_responses:
+            return await self._handle_found_values(found_responses)
 
-        # if we've contacted all nodes in our binary tree (heapq) and
-        # have found no value we do nothing (the network has been updated
-        # accordingly already)
-        if self.nearest.have_contacted_all():
+        if self.nearest.has_exhausted_contacts():
             return None
 
-        # recursively execute find until we return from either _handle_found_values
-        # or from have_contacted_all
         return await self.find()
 
-    async def _handle_found_values(self, values: List[bytes]) -> Any:
+    async def _handle_found_values(
+        self, items: List[IndexNodeAsDict]
+    ) -> Optional[bytes]:
         """
 		We got some values!  Exciting. But let's make sure they're all the
 		same or freak out a little bit.  Also, make sure we tell the nearest
@@ -231,76 +255,47 @@ class ValueSpiderCrawl(SpiderCrawl):
 		to the current node so as to increase the performance/lookup of
 		network operations
 
-		Parameters
-		----------
-			values: List[bytes]
+		@parameters
+            values: List[IndexNodeAsDict]
 				Values returned from recursive _find operation
 
-		Returns
-		-------
-			value: Any
+		@returns
+            value: Optional[bytes]
 				Original value that we were searching for
 		"""
-        value_counts = collections.Counter(values)
-        if len(value_counts) != 1:
-            log.warning("%s multiple values for %s", self.node, str(values))
 
-        # the most common value's key
-        value = value_counts.most_common(1)[0][0]
+        def extract_key(d: IndexNodeAsDict) -> Optional[bytes]:
+            key = list(d.keys())[0]
+            return d[key]
+
+        flattened = list(map(extract_key, items))  # type: ignore
+
+        value_counts = collections.Counter(flattened)
+        if len(value_counts) != 1:
+            log.warning("%s multiple values for %s", self.node, value_counts)
+            return None
+
+        top_value, _ = value_counts.most_common(1)[0]
 
         peer = self.nearest_without_value.popleft()
-        if peer:
+        if peer and isinstance(peer, PingNode):
             log.debug(
                 "%s asking nearest node %i to store %s",
                 self.node,
                 peer.long_id,
-                str(value),
+                str(top_value),
             )
-            await self.protocol.call_store(peer, self.node.key, value)
-        return value
+            top_key = None
+            for d in items:
+                k, v = list(d.items())[0]
+                if v == top_value:
+                    top_key = k
+                    break
 
+            # TODO: come back and guarantee that top_key will be found
+            if not top_key:
+                raise RuntimeError("top_key not found here")
 
-class NodeSpiderCrawl(SpiderCrawl):
-    async def find(self) -> Future:
-        """
-		A wrapper for the base class's _find, where we attempt to find the
-		closest node requested using the protocols call_find_node rpc method
-
-		Returns
-		-------
-		    Future:
-		"""
-        return await self._find(self.protocol.call_find_node)
-
-    async def _nodes_found(self, responses: List[Response]) -> Future:
-        """
-		Handle the result of an iteration in _find.
-
-		Parameters
-		----------
-			responses: List[Response]
-				Responses received from peer nodes via NodeCrawl execution
-
-			Where Any can include:
-				List[PeerInfoResponse] representing peer nodes
-				KeyValueResponse representing found values
-
-		Returns
-		-------
-			Future:
-				Recursive call to _find
-		"""
-        toremove = []
-        for peerid, response in responses.items():
-            response = RPCFindResponse(response)
-            if not response.did_happen():
-                log.debug("%s encountered empty response, removing...", self.node)
-                toremove.append(peerid)
-            else:
-                self.nearest.push(response.get_node_list())
-        self.nearest.remove(toremove)
-
-        if self.nearest.have_contacted_all():
-            log.debug("%s has contacted all nearest nodes", self.node)
-            return list(self.nearest)
-        return await self.find()
+            inode = IndexNode(top_key, top_value)
+            await self.protocol.call_store(peer, inode)
+        return top_value

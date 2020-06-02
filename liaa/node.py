@@ -1,6 +1,6 @@
 import operator
-import abc
 import heapq
+import time
 import logging
 
 from _typing import *
@@ -12,7 +12,7 @@ from liaa.utils import hex_to_int, check_dht_value_type, split_addr, pack
 log = logging.getLogger(__name__)
 
 
-class Node(abc.ABC):
+class Node:
     def __init__(self, key: str):
         """
 		Simple object to encapsulate the concept of a Node (minimally an ID, but
@@ -52,7 +52,6 @@ class Node(abc.ABC):
     def __str__(self) -> str:
         return self.__class__.__name__ + "@" + self.key
 
-    @abc.abstractmethod
     def __iter__(self) -> Iterator[object]:
         raise NotImplementedError
 
@@ -65,10 +64,9 @@ class PingNode(Node):
     def addr(self) -> Tuple[str, int]:
         return split_addr(self.key)
 
-    def ping(self):
+    def ping(self) -> None:
         # TODO: implment some caller dialing (ip, port)
-        ip, port = self.addr()
-        return
+        _ip, _port = self.addr()
 
     def __iter__(self) -> Iterator[object]:
         # TODO: the only difference between a PingNode and IndexNode
@@ -78,38 +76,43 @@ class PingNode(Node):
 
 
 class IndexNode(Node):
-    def __init__(self, key: str, value: bytes, birthday: float = Optional[float]):
+    def __init__(
+        self, key: str, value: Optional[bytes], birthday: float = Optional[float]
+    ):
         """
 		Referenced as the {key, value} pair in the protocol
 		"""
         super(IndexNode, self).__init__(key)
-        self.value: bytes = value
-        self.birthday: float = birthday
-
-    def __iter__(self) -> Iterator[object]:
-        return iter((self.key, self.value, self.birthday))
+        self.value = value
+        self.birthday = birthday or time.monotonic()
 
     def has_valid_value(self) -> bool:
         return check_dht_value_type(self.value)
 
+    def as_dict(self) -> Dict[str, Optional[bytes]]:
+        return {self.key: self.value}
 
-N = TypeVar("N", bound=Union[PingNode, IndexNode])
-HeapItem = TypeVar("HeapItem", bound=Tuple[float, N])
+    def __iter__(self) -> Iterator[object]:
+        return iter((self.key, self.value, self.birthday))
+
+# TODO: what is this? <(‘-‘<) 
+GenericNode = Union[PingNode, IndexNode]
+HeapNode = Tuple[float, GenericNode]
 
 
 class NodeHeap:
-    def __init__(self, node: N, maxsize: int):
+    def __init__(self, node: GenericNode, maxsize: int):
         """
 		A heap of nodes using distance as the sorting metric
 		"""
 
         # TODO: NodeHeap needs an index for O(1) lookup of nodes
         self.node = node
-        self.heap: List[HeapItem] = []
+        self.heap: List[HeapNode] = []
         self.contacted: Set[str] = set()
         self.maxsize = maxsize
 
-    def remove(self, nodes: List[N]):
+    def remove(self, nodes: List[str]) -> None:
         """
 		Remove a list of peer ids from this heap. Note that while this
 		heap retains a constant visible size (based on the iterator), it's
@@ -121,53 +124,65 @@ class NodeHeap:
         if not nodes_as_set:
             return
 
-        nheap: List[HeapItem] = []
+        nheap: List[HeapNode] = []
         for distance, node in self.heap:
-            if node not in nodes_as_set:
+            if node.key not in nodes_as_set:
                 heapq.heappush(nheap, (distance, node))
             else:
                 log.debug("removing peer %s from node %s", str(node), str(node))
         self.heap = nheap
 
-    def get_node(self, key: str) -> Optional[N]:
+    def get_node(self, key: str) -> Optional[GenericNode]:
         for _, node in self.heap:
             if node.key == key:
                 return node
         return None
 
-    def have_contacted_all(self) -> bool:
+    def has_exhausted_contacts(self) -> bool:
         return len(self.get_uncontacted()) == 0
 
     def get_ids(self) -> List[str]:
-        return [n.key for n in self]
+        return [n.key for n in map(operator.itemgetter(1), self.heap)]
 
-    def mark_contacted(self, node: N):
+    def get_all_ids(self) -> List[str]:
+        return [n.key for n in map(operator.itemgetter(1), self.heap)]
+
+    def get_uncontacted(self) -> List[GenericNode]:
+        return [n for n in self if n.key not in self.contacted]
+
+    def get_concatcted(self) -> List[GenericNode]:
+        return [n for n in self if n.key in self.contacted]
+
+    def mark_contacted(self, node: GenericNode) -> None:
         self.contacted.add(node.key)
 
-    def popleft(self) -> Optional[N]:
+    def popleft(self) -> Optional[GenericNode]:
         return heapq.heappop(self.heap)[1] if self else None
 
-    def push(self, nodes: List[N]):
+    def push(self, nodes: List[GenericNode]) -> None:
         """
 		Push nodes onto heap.
 		"""
+        if not isinstance(nodes, list):
+            raise ValueError("push expects type list, found ", type(nodes))
         for node in nodes:
             if node not in self:
                 distance = self.node.distance_to(node)
                 heapq.heappush(self.heap, (distance, node))
 
+    def true_size(self) -> int:
+        return len(self.heap)
+
     def __len__(self) -> int:
         return min(len(self.heap), self.maxsize)
 
-    def __iter__(self) -> Iterator[N]:
+    def __iter__(self) -> Iterator[GenericNode]:
         nodes = heapq.nsmallest(self.maxsize, self.heap)
         return iter(map(operator.itemgetter(1), nodes))
 
-    def __contains__(self, node: N) -> bool:
+    def __contains__(self, node: GenericNode) -> bool:
+        # TODO: need that index here for constant lookup
         for _, other in self.heap:
             if node.key == other.key:
                 return True
         return False
-
-    def get_uncontacted(self) -> List[N]:
-        return [n for n in self if n.key not in self.contacted]

@@ -5,10 +5,9 @@ import os
 import time
 from collections import OrderedDict
 from itertools import takewhile
-from typing import List, Any, Tuple, Iterator, Optional, Dict
 
-from liaa.node import IndexNode, Node, PingNode
-
+from _typing import *
+from liaa.node import GenericNode, IndexNode, PingNode
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class BaseStorage(abc.ABC):
 
         self._init_rootdir()
 
-    def _init_rootdir(self):
+    def _init_rootdir(self) -> None:
         if not os.path.exists(self.root_dir):
             log.debug("liaa dir at %s not found, creating...", self.root_dir)
             os.mkdir(self.root_dir)
@@ -44,14 +43,14 @@ class BaseStorage(abc.ABC):
             log.debug("node dir at %s not found, creating...", self.dir)
             os.mkdir(self.dir)
 
-    def prune(self):
+    def prune(self) -> None:
         """ Prune storage interface """
         items = self.iter_older_than(self.ttl)
         log.debug("%s pruning 0 items older than %i", self.node, self.ttl)
         for node in items:
             self.remove(node)
 
-    def iter_older_than(self, seconds_old: int) -> List[Tuple[int, bytes]]:
+    def iter_older_than(self, seconds_old: int) -> List[IndexNode]:
         """
 		Return nodes that are older than `seconds_old`
 
@@ -65,7 +64,7 @@ class BaseStorage(abc.ABC):
 
 		Returns
 		-------
-			List[Tuple[int, bytes]]:
+			List[IndexNode]:
 				Zipped keys, and values of nodes that are older that `seconds_old`
 		"""
         min_birthday = time.monotonic() - seconds_old
@@ -85,15 +84,15 @@ class BaseStorage(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def set(self, node: IndexNode):
+    def set(self, node: IndexNode) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def remove(self, node: IndexNode):
+    def remove(self, node: IndexNode) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _triple_iter(self):
+    def _triple_iter(self) -> List[Tuple[str, IndexNode]]:
         raise NotImplementedError
 
 
@@ -104,15 +103,15 @@ class EphemeralStorage(BaseStorage):
 
 		Parameters
 		----------
-			node: Node
+			node: PingNode
 				The node representing this peer
+            ttl: int
+                Time to live for node
 		"""
         super(EphemeralStorage, self).__init__(node, ttl)
         self.data: Dict[str, IndexNode] = OrderedDict()
 
-    def get(
-        self, key: str, default: Optional[IndexNode] = None
-    ) -> Optional[IndexNode]:
+    def get(self, key: str, default: Optional[IndexNode] = None) -> Optional[IndexNode]:
         """
 		Retrieve a node from storage
 
@@ -132,7 +131,7 @@ class EphemeralStorage(BaseStorage):
         log.debug("%s fetching Node %i", self.node, key)
         return self.data.get(key, default)
 
-    def set(self, node: IndexNode):
+    def set(self, node: IndexNode) -> None:
         """
 		Save a given Node in storage
 
@@ -148,13 +147,13 @@ class EphemeralStorage(BaseStorage):
         self.data[node.key] = node
         log.debug("%s storage has %i items", self.node, len(self))
 
-    def remove(self, node: Node):
+    def remove(self, node: GenericNode) -> None:
         """
 		Remove a node from storage
 
 		Parameters
 		----------
-			node: Node
+			node: GenericNode
 				Node to be removed
 		"""
         log.debug("%s removing resource %s", self.node, node)
@@ -167,7 +166,7 @@ class EphemeralStorage(BaseStorage):
 		"""
         return list(self.data.items())
 
-    def __iter__(self) -> Iterator[Node]:
+    def __iter__(self) -> Iterator[IndexNode]:
         self.prune()
         log.debug("%s iterating over %i items in storage", self.node, len(self.data))
         items = self._triple_iter()
@@ -175,7 +174,7 @@ class EphemeralStorage(BaseStorage):
         for _, node in items:
             yield node
 
-    def __contains__(self, node: Node) -> bool:
+    def __contains__(self, node: GenericNode) -> bool:
         return node.key in self.data
 
     def __len__(self) -> int:

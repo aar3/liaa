@@ -3,9 +3,7 @@ sphinx
 sphinxcontrib-napoleon
 sphinxcontrib-zopeext
 pycodestyle
-pytest
-pytest-asyncio
-pytest-cov
 codecov
 mypy
+mypy-extensions
 black

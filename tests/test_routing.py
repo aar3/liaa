@@ -43,33 +43,33 @@ class TestKBucket:
         assert isinstance(bucket, KBucket)
         assert bucket.last_seen
 
-    def test_can_add_node_to_bucket(self, make_network_node):
+    def test_can_add_node_to_bucket(self, ping_node):
         bucket = KBucket(0, 10, 2)
-        assert bucket.add_node(make_network_node()) is True
-        assert bucket.add_node(make_network_node()) is True
-        assert bucket.add_node(make_network_node()) is False
+        assert bucket.add_node(ping_node()) is True
+        assert bucket.add_node(ping_node()) is True
+        assert bucket.add_node(ping_node()) is False
         assert len(bucket) == 2
 
-    def test_can_get_node_from_bucket(self, make_network_node):
+    def test_can_get_node_from_bucket(self, ping_node):
         bucket = KBucket(0, 10, 2)
-        bucket.add_node(make_network_node())
-        bucket.add_node(make_network_node())
+        bucket.add_node(ping_node())
+        bucket.add_node(ping_node())
         fetched = bucket.get_set()
         assert len(fetched) == 2
 
-    def test_excess_nodes_added_to_bucket_become_replacements(self, make_network_node):
+    def test_excess_nodes_added_to_bucket_become_replacements(self, ping_node):
         k = 3
         bucket = KBucket(0, 10, 3)
-        nodes = [make_network_node() for x in range(10)]
+        nodes = [ping_node() for x in range(10)]
         for node in nodes:
             bucket.add_node(node)
 
         assert bucket.get_set() == nodes[:k]
         assert bucket.get_replacement_set() == nodes[k:]
 
-    def test_remove_replaces_with_replacement(self, make_basic_node):
+    def test_remove_replaces_with_replacement(self, generic_node):
         bucket = KBucket(0, 10, 3)
-        nodes = [make_basic_node() for x in range(10)]
+        nodes = [generic_node() for x in range(10)]
         for node in nodes:
             bucket.add_node(node)
         assert len(bucket.replacement_set) == 7
@@ -79,9 +79,9 @@ class TestKBucket:
         assert len(bucket.get_replacement_set()) == 6
         assert replacements[-1] in bucket.get_set()
 
-    def test_remove_all_nodes_uninitializes_bucket(self, make_basic_node):
+    def test_remove_all_nodes_uninitializes_bucket(self, generic_node):
         bucket = KBucket(0, 10, 3)
-        nodes = [make_basic_node() for x in range(10)]
+        nodes = [generic_node() for x in range(10)]
         for node in nodes:
             bucket.add_node(node)
 
@@ -90,10 +90,10 @@ class TestKBucket:
             bucket.remove_node(node)
         assert not bucket
 
-    def test_can_split(self, make_network_node, make_storage_node):
+    def test_can_split(self, ping_node, index_node):
         bucket = KBucket(0, 10, 5)
-        bucket.add_node(make_network_node())
-        bucket.add_node(make_storage_node())
+        bucket.add_node(ping_node())
+        bucket.add_node(index_node())
 
         one, two = bucket.split()
 
@@ -102,67 +102,65 @@ class TestKBucket:
 
         assert len(one) + len(two) == len(bucket)
 
-    def test_double_added_node_is_put_at_end(self, make_network_node):
+    def test_double_added_node_is_put_at_end(self, ping_node):
         # make sure when a node is double added it"s put at the end
         bucket = KBucket(0, 10, 3)
-        same = make_network_node()
-        nodes = [make_network_node(), same, same]
+        same = ping_node()
+        nodes = [ping_node(), same, same]
         for node in nodes:
             bucket.add_node(node)
 
         for index, node in enumerate(bucket.get_set()):
             assert node == nodes[index]
 
-    def test_bucket_has_in_range(self, make_network_node, make_storage_node):
+    def test_bucket_has_in_range(self, ping_node, index_node):
         bucket = KBucket(0, MAX_LONG, 10)
-        assert bucket.has_in_range(make_network_node()) is True
-        assert bucket.has_in_range(make_network_node()) is True
-        assert bucket.has_in_range(make_storage_node(key=rand_str(10))) is True
-        assert bucket.has_in_range(make_storage_node(key=rand_str(16))) is True
-        assert bucket.has_in_range(make_storage_node(key=rand_str(19))) is True
+        assert bucket.has_in_range(ping_node()) is True
+        assert bucket.has_in_range(ping_node()) is True
+        assert bucket.has_in_range(index_node(key=rand_str(10))) is True
+        assert bucket.has_in_range(index_node(key=rand_str(16))) is True
+        assert bucket.has_in_range(index_node(key=rand_str(19))) is True
 
         try:
-            bucket.has_in_range(make_storage_node(key=rand_str(21))) is False
+            bucket.has_in_range(index_node(key=rand_str(21))) is False
         except OverflowError as err:
             assert str(err).endswith("cannot exceed " + str(MAX_LONG))
 
 
 class TestRoutingTable:
-    def test_can_flush_table(self, make_network_node):
+    def test_can_flush_table(self, ping_node):
         ksize = 3
-        table = RoutingTable(KademliaProtocol, ksize=ksize, node=make_network_node())
+        table = RoutingTable(KademliaProtocol, ksize=ksize, node=ping_node())
         assert isinstance(table, RoutingTable)
         assert len(table.buckets) == 1
 
-    def test_can_split_bucket(self, make_network_node, make_kbucket):
+    def test_can_split_bucket(self, ping_node, kbucket):
         ksize = 3
-        table = RoutingTable(KademliaProtocol, ksize=ksize, node=make_network_node())
-        table.buckets.extend([make_kbucket(ksize), make_kbucket(ksize)])
+        table = RoutingTable(KademliaProtocol, ksize=ksize, node=ping_node())
+        table.buckets.extend([kbucket(ksize), kbucket(ksize)])
         assert len(table.buckets) == 3
         table.split_bucket(0)
         assert len(table.buckets) == 4
 
-    def test_lonely_buckets_returns_stale(
-        self, make_network_node, make_kbucket, make_basic_node
-    ):
+    def test_lonely_buckets_returns_stale(self, ping_node, kbucket, generic_node):
         ksize = 3
-        table = RoutingTable(KademliaProtocol, ksize, node=make_network_node())
-        table.buckets.append(make_kbucket(ksize))
-        table.buckets[0].add_node(make_basic_node())
-        table.buckets.append(make_kbucket(ksize))
+        table = RoutingTable(KademliaProtocol, ksize, node=ping_node())
+        table.buckets.append(kbucket(ksize))
+        table.buckets[0].add_node(generic_node())
+        table.buckets.append(kbucket(ksize))
 
         # make bucket lonely
         table.buckets[0].last_seen = time.monotonic() - 3600
         lonelies = table.lonely_buckets()
         assert len(lonelies) == 1
 
-    def test_remove_contact_removes_buckets_node(self, make_network_node, make_kbucket):
+    def test_remove_contact_removes_buckets_node(self, ping_node, kbucket):
         ksize = 3
-        table = RoutingTable(KademliaProtocol, ksize, node=make_network_node())
-        table.buckets.append(make_kbucket(ksize))
+        table = RoutingTable(KademliaProtocol, ksize, node=ping_node())
+        table.buckets.append(kbucket(ksize))
         assert not table.buckets[1]
 
-        node = make_network_node()
+        node = ping_node()
         table.add_contact(node)
         index = table.get_bucket_index_for(node)
         assert len(table.buckets[index]) == 1
@@ -171,30 +169,30 @@ class TestRoutingTable:
         index = table.get_bucket_index_for(node)
         assert not table.buckets[index]
 
-    def test_is_new_node(self, make_network_node):
-        table = RoutingTable(KademliaProtocol, 3, node=make_network_node())
-        assert table.is_new_node(make_network_node())
+    def test_is_new_node(self, ping_node):
+        table = RoutingTable(KademliaProtocol, 3, node=ping_node())
+        assert table.is_new_node(ping_node())
 
-    def test_add_contact(self, make_network_node):
+    def test_add_contact(self, ping_node):
         ksize = 3
-        table = RoutingTable(KademliaProtocol, ksize, node=make_network_node())
-        table.add_contact(make_network_node())
+        table = RoutingTable(KademliaProtocol, ksize, node=ping_node())
+        table.add_contact(ping_node())
         assert len(table.buckets) == 1
         assert len(table.buckets[0]) == 1
 
     @pytest.mark.skip(reason="TODO: implement after crawler tests")
-    def test_find_neighbors_returns_k_neighbors(self, make_network_node, _):
+    def test_find_neighbors_returns_k_neighbors(self, ping_node, _):
         ksize = 3
-        _ = RoutingTable(KademliaProtocol, ksize, node=make_network_node())
+        _ = RoutingTable(KademliaProtocol, ksize, node=ping_node())
 
 
 # pylint: disable=too-few-public-methods
 class TestTableTraverser:
-    def test_iteration(self, make_server, make_network_node):
+    def test_iteration(self, make_server, ping_node):
         nodes = []
         for port in range(8000, 8010):
             key = join_addr(("0.0.0.0", port))
-            nodes.append(make_network_node(key))
+            nodes.append(ping_node(key))
 
         buckets = []
         for i in range(5):

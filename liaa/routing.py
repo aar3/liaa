@@ -4,13 +4,13 @@ import logging
 import operator
 import asyncio
 import collections
-from typing import Any, Optional, List, Tuple, Dict
+from _typing import *
 
 from itertools import chain
 
 from liaa import MAX_LONG
 from liaa.utils import shared_prefix, bytes_to_bits
-from liaa.node import Node
+from liaa.node import GenericNode
 
 
 log = logging.getLogger(__name__)
@@ -20,23 +20,25 @@ class LRU:
     # TODO: consider a more reasonable maxsize here
     def __init__(self, maxsize: int = 100000):
         self.maxsize = maxsize
-        self.index: Dict[int, Node] = collections.OrderedDict()
+        self.index: Dict[int, GenericNode] = collections.OrderedDict()
 
-    def add(self, key: int, value: Node):
+    def add(self, key: int, value: GenericNode) -> None:
         if len(self) == self.maxsize:
             self.pop()
         self.index[key] = value
 
-    def pop(self) -> Tuple[int, Node]:
+    def pop(self) -> Tuple[int, GenericNode]:
         return self.index.popitem(last=True)  # type: ignore
 
-    def get(self, key: int, default: Optional[Any]) -> Optional[Node]:
+    def get(
+        self, key: int, default: Optional[GenericNode] = None
+    ) -> Optional[GenericNode]:
         return self.index.get(key, default)
 
-    def remove(self, key: int):
+    def remove(self, key: int) -> None:
         del self.index[key]
 
-    def add_head(self, key: int, value: Node):
+    def add_head(self, key: int, value: GenericNode) -> None:
         if len(self) == self.maxsize:
             self.pop()
 
@@ -46,45 +48,45 @@ class LRU:
         new.update(self.index)
         self.index = new
 
-    def items(self) -> List[Tuple[int, Node]]:
+    def items(self) -> List[Tuple[int, GenericNode]]:
         return list(self.index.items())
 
-    def nodes(self) -> List[Node]:
+    def nodes(self) -> List[GenericNode]:
         # TODO: revisit way to get LRU head without having to call .nodes()
         return list(self.index.values())
 
-    def head(self) -> Node:
+    def head(self) -> GenericNode:
         return self.nodes()[0]
 
     def __len__(self) -> int:
         return len(self.index)
 
-    def __contains__(self, node: Node) -> bool:
+    def __contains__(self, node: GenericNode) -> bool:
         return node.long_id in self.index
 
-    def __delitem__(self, node: Node):
+    def __delitem__(self, node: GenericNode) -> None:
         if node in self:
             del self.index[node.long_id]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.index)
 
 
 class KBucket:
-    def __init__(self, lower_bound: int, upper_bound: int, ksize: int):
+    def __init__(self, lower_bound: float, upper_bound: float, ksize: int):
         self.range = (lower_bound, upper_bound)
         self.main_set = LRU()
         self.replacement_set = LRU()
         self.set_last_seen()
         self.ksize = ksize
 
-    def set_last_seen(self):
+    def set_last_seen(self) -> None:
         self.last_seen: float = time.monotonic()
 
-    def get_set(self) -> List[Node]:
+    def get_set(self) -> List[GenericNode]:
         return self.main_set.nodes()
 
-    def get_replacement_set(self) -> List[Node]:
+    def get_replacement_set(self) -> List[GenericNode]:
         """
 		Section 4.1
 
@@ -94,7 +96,17 @@ class KBucket:
 		"""
         return self.replacement_set.nodes()
 
-    def split(self):
+    def get_total_set(self) -> List[GenericNode]:
+        all_nodes = []
+        for n in self.get_set():
+            all_nodes.append(n)
+
+        for n in self.get_replacement_set():
+            all_nodes.append(n)
+
+        return all_nodes
+
+    def split(self) -> Tuple["KBucket", "KBucket"]:
         midpoint = (self.range[0] + self.range[1]) / 2
         one = KBucket(self.range[0], midpoint, self.ksize)
         two = KBucket(midpoint + 1, self.range[1], self.ksize)
@@ -105,7 +117,7 @@ class KBucket:
             bucket.add_node(node)
         return (one, two)
 
-    def remove_node(self, node: Node):
+    def remove_node(self, node: GenericNode) -> None:
         if node in self.replacement_set:
             del self.replacement_set[node]
 
@@ -116,11 +128,11 @@ class KBucket:
                 newnode_id, newnode = self.replacement_set.pop()
                 self.main_set.add(newnode_id, newnode)
 
-    def add_node(self, node: Node):
+    def add_node(self, node: GenericNode) -> bool:
         """
 		Section 4.1
 
-		Add a C{Node} to the C{KBucket}.  Return True if successful,
+		Add a C{GenericNode} to the C{KBucket}.  Return True if successful,
 		False if the bucket is full. Using dict's ability to maintain order
 		of items
 
@@ -149,19 +161,19 @@ class KBucket:
     def is_full(self) -> bool:
         return len(self) == self.ksize
 
-    def head(self) -> Node:
+    def head(self) -> GenericNode:
         return self.main_set.nodes()[0]
 
-    def has_in_range(self, node) -> bool:
+    def has_in_range(self, node: GenericNode) -> bool:
         return self.range[0] <= node.long_id <= self.range[1]
 
-    def is_new_node(self, node: Node) -> bool:
+    def is_new_node(self, node: GenericNode) -> bool:
         return node not in self.main_set
 
     def total_nodes(self) -> int:
         return len(self.get_set()) + len(self.get_replacement_set())
 
-    def __getitem__(self, node_id: int) -> Optional[Node]:
+    def __getitem__(self, node_id: int) -> Optional[GenericNode]:
         return self.main_set.get(node_id, None)
 
     def __len__(self) -> int:
@@ -169,7 +181,7 @@ class KBucket:
 
 
 class RoutingTable:
-    def __init__(self, protocol, ksize: int, node: Node):
+    def __init__(self, protocol: TKademliaProtocol, ksize: int, node: GenericNode):
         """
 		Section 2.4
 
@@ -183,11 +195,11 @@ class RoutingTable:
         self.maxlong: int = MAX_LONG
         self.flush()
 
-    def flush(self):
+    def flush(self) -> None:
         """ Each routing table starts with a single k-bucket """
         self.buckets: List[KBucket] = [KBucket(0, self.maxlong, self.ksize)]
 
-    def split_bucket(self, index: int):
+    def split_bucket(self, index: int) -> None:
         one, two = self.buckets[index].split()
         self.buckets[index] = one
         self.buckets.insert(index + 1, two)
@@ -199,17 +211,17 @@ class RoutingTable:
         hrago = time.monotonic() - 3600
         return [b for b in self.buckets if b.last_seen < hrago and len(b) > 0]
 
-    def remove_contact(self, node: Node):
+    def remove_contact(self, node: GenericNode) -> None:
         """ Remove a node from its associated k-bucket """
         index = self.get_bucket_index_for(node)
         self.buckets[index].remove_node(node)
 
-    def is_new_node(self, node: Node) -> bool:
+    def is_new_node(self, node: GenericNode) -> bool:
         """ Determine if the node's intended k-bucket already has the node """
         index = self.get_bucket_index_for(node)
         return self.buckets[index].is_new_node(node)
 
-    def add_contact(self, node: Node, attempted: bool = False):
+    def add_contact(self, node: GenericNode, attempted: bool = False) -> None:
         """
 		Add a node to the routing table
 
@@ -256,7 +268,7 @@ class RoutingTable:
                 bucket.main_set.add_head(node.long_id, node)
         return None
 
-    def get_bucket_index_for(self, node: Node) -> int:
+    def get_bucket_index_for(self, node: GenericNode) -> int:
         """
 		Get the index of the bucket that the given node would fall into.
 		"""
@@ -267,11 +279,14 @@ class RoutingTable:
         raise RuntimeError
 
     def find_neighbors(
-        self, node: Node, k: Optional[int] = None, exclude: Optional[Node] = None
-    ) -> List[Node]:
+        self,
+        node: GenericNode,
+        k: Optional[int] = None,
+        exclude: Optional[GenericNode] = None,
+    ) -> List[GenericNode]:
 
         k = k or self.ksize
-        nodes: List[Node] = []
+        nodes: List[GenericNode] = []
 
         for neighbor in TableTraverser(self, node):
             notexcluded = exclude is None or not neighbor.is_same_node(exclude)
@@ -294,7 +309,7 @@ class RoutingTable:
 
 
 class TableTraverser:
-    def __init__(self, table: RoutingTable, start_node: Node):
+    def __init__(self, table: RoutingTable, start_node: GenericNode):
         index: int = table.get_bucket_index_for(start_node)
         table.buckets[index].set_last_seen()
         self.current_nodes = table.buckets[index].get_set()
@@ -302,10 +317,10 @@ class TableTraverser:
         self.right_buckets = table.buckets[(index + 1) :]
         self.left = True
 
-    def __iter__(self):
+    def __iter__(self) -> "TableTraverser":
         return self
 
-    def __next__(self):
+    def __next__(self) -> GenericNode:
         """
 		Pop an item from the left subtree, then right, then left, etc.
 		"""

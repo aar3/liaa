@@ -17,17 +17,17 @@ from liaa.storage import EphemeralStorage
 class TestRPCDatagramProtocol:
     loop = asyncio.get_event_loop()
 
-    def test_can_init_proto(self, make_network_node):
-        node = make_network_node()
+    def test_can_init_proto(self, ping_node):
+        node = ping_node()
         proto = RPCDatagramProtocol(node, wait=5)
         assert isinstance(proto, RPCDatagramProtocol)
         assert proto.source_node.key == node.key
         assert not proto.index
 
-    def test_proto_can_accept_request(self, make_datagram, make_sandbox, make_proto):
+    def test_proto_can_accept_request(self, make_datagram, sandbox, make_proto):
         proto = make_proto()
 
-        box = make_sandbox(proto)
+        box = sandbox(proto)
 
         def accept_request_stub(dgram, _):
             _, data = dgram[1:21], umsgpack.unpackb(dgram[21:])
@@ -45,7 +45,7 @@ class TestRPCDatagramProtocol:
         assert data == "12345"
 
     def test_proto_can_accept_response_via_stub(
-        self, make_datagram, make_proto, make_sandbox
+        self, make_datagram, make_proto, sandbox
     ):
         proto = make_proto()
         dgram = make_datagram()
@@ -57,7 +57,7 @@ class TestRPCDatagramProtocol:
 
         assert len(proto.index) == 1
 
-        box = make_sandbox(proto)
+        box = sandbox(proto)
 
         def accept_response_stub(dgram, proto, addr):
             idf, data = dgram[1:21], umsgpack.unpackb(dgram[21:])
@@ -101,47 +101,40 @@ class TestRPCDatagramProtocol:
 
 
 class TestKademliaProtocol:
-    def test_can_init_proto(self, make_network_node):
-        node = make_network_node()
+    def test_can_init_proto(self, ping_node):
+        node = ping_node()
         proto = KademliaProtocol(node, storage=EphemeralStorage(node), ksize=20)
         assert isinstance(proto, KademliaProtocol)
         assert isinstance(proto.storage, EphemeralStorage)
 
-    def test_proto_can_get_refresh_ids_of_stale_buckets(
-        self, make_proto, make_basic_node
-    ):
+    def test_proto_can_get_refresh_ids_of_stale_buckets(self, make_proto, generic_node):
         ksize = 3
         proto = make_proto(ksize=ksize)
         proto.router = RoutingTable(proto, ksize, proto.source_node)
 
-        for x in range(4):
-            node = make_basic_node()
-            node.long_id = x
+        for _ in range(4):
+            node = generic_node()
             proto.router.add_contact(node)
 
         assert len(proto.router.buckets) == 2
 
         # randomly pick some buckets to make stale
-        sample = random.sample(proto.router.buckets, 2)
-        for bucket in sample:
-            bucket.last_seen = time.monotonic() - 3600
+        bucket = random.choice(proto.router.buckets)
+        bucket.last_seen = time.monotonic() - 3601
+        bucket_node_ids = [n.key for n in bucket.get_total_set()]
 
-        to_refresh = proto.get_refresh_ids()
-        assert isinstance(to_refresh, list)
-        assert to_refresh
-        assert all([isinstance(n, Node) for n in to_refresh])
+        refresh_bucket_ids = proto.get_refresh_ids()
+        assert bucket_node_ids == refresh_bucket_ids
 
     def test_proto_rpc_stun_returns_same_sender_arg_that_was_passed(
-        self, make_network_node, make_proto
+        self, ping_node, make_proto
     ):
         proto = make_proto()
-        sender = make_network_node()
+        sender = ping_node()
         assert sender == proto.rpc_stun(sender)
 
-    def test_proto_rpc_ping_returns_requestors_id(
-        self, make_network_node, make_proto, make_sandbox
-    ):
-        sender = make_network_node()
+    def test_proto_rpc_ping_returns_requestors_id(self, ping_node, make_proto, sandbox):
+        sender = ping_node()
         proto = make_proto()
 
         # pylint: disable=unused-argument
@@ -152,7 +145,7 @@ class TestKademliaProtocol:
         def call_store_stub(node_to_ask, key, value):
             return True
 
-        box = make_sandbox(proto)
+        box = sandbox(proto)
         box.stub("call_store", call_store_stub)
         box.stub("rpc_ping", ping_stub)
 
@@ -161,10 +154,8 @@ class TestKademliaProtocol:
 
         box.restore()
 
-    def test_proto_rpc_store_stores_a_give_key_value_pair(
-        self, make_network_node, make_proto
-    ):
-        sender = make_network_node()
+    def test_proto_rpc_store_stores_a_give_key_value_pair(self, ping_node, make_proto):
+        sender = ping_node()
         proto = make_proto()
 
         success = proto.rpc_store(sender, "foo", b"bar")
@@ -175,9 +166,7 @@ class TestKademliaProtocol:
         assert result.key == "foo"
         assert result.value == b"bar"
 
-    def test_welcome_if_new_fails(
-        self, make_proto, make_sandbox, make_basic_node, make_storage_node
-    ):
+    def test_welcome_if_new_fails(self, make_proto, sandbox, generic_node, index_node):
         def welcome_if_new_stub(proto, node):
             if not proto.router.is_new_node(node) or isinstance(node, IndexNode):
                 return
@@ -197,24 +186,22 @@ class TestKademliaProtocol:
 
         # if node is not new node
         proto = make_proto()
-        box = make_sandbox(proto)
-        node = make_basic_node()
+        box = sandbox(proto)
+        node = generic_node()
         box.stub("welcome_if_new", welcome_if_new_stub)
         proto.router.add_contact(node)
         assert not proto.welcome_if_new(proto, node)
 
         # if node is resource node
         proto = make_proto()
-        box = make_sandbox(proto)
-        node = make_storage_node()
+        box = sandbox(proto)
+        node = index_node()
         box.stub("welcome_if_new", welcome_if_new_stub)
         assert not proto.welcome_if_new(proto, node)
 
-    def test_welcome_if_new_adds(
-        self, make_proto, make_network_node, make_sandbox, make_storage_node
-    ):
+    def test_welcome_if_new_adds(self, make_proto, ping_node, sandbox, index_node):
         proto = make_proto()
-        box = make_sandbox(proto)
+        box = sandbox(proto)
 
         def welcome_if_new_stub(proto, node):
             assert proto.router.is_new_node(node)
@@ -240,8 +227,8 @@ class TestKademliaProtocol:
             proto.router.add_contact(node)
 
         # make some nodes and add them to storage & router
-        resources = [make_storage_node() for _ in range(3)]
-        peers = [make_network_node() for _ in range(3)]
+        resources = [index_node() for _ in range(3)]
+        peers = [ping_node() for _ in range(3)]
         nodes = list(itertools.chain(peers, resources))
 
         for node in nodes:
@@ -255,7 +242,7 @@ class TestKademliaProtocol:
         prevsize = proto.router.total_nodes()
 
         # add a new node that should have neighbors
-        newnode = make_network_node()
+        newnode = ping_node()
         box.stub("welcome_if_new", welcome_if_new_stub)
         result = proto.welcome_if_new(proto, newnode)
 
@@ -263,10 +250,10 @@ class TestKademliaProtocol:
         assert proto.router.total_nodes() == prevsize + 1
 
     def test_welcome_if_new_calls_store(
-        self, make_proto, make_network_node, make_sandbox, make_storage_node
+        self, make_proto, ping_node, sandbox, index_node
     ):
         proto = make_proto()
-        box = make_sandbox(proto)
+        box = sandbox(proto)
 
         def welcome_if_new_stub(proto, node):
             assert proto.router.is_new_node(node)
@@ -292,11 +279,11 @@ class TestKademliaProtocol:
             proto.router.add_contact(node)
 
         # create some resources and add it one to storage
-        resources = [make_storage_node() for _ in range(3)]
+        resources = [index_node() for _ in range(3)]
         proto.storage.set(resources[0])
 
         # a new peer should have no neighbors and call_store should be called
-        newnode = make_network_node()
+        newnode = ping_node()
         box.stub("welcome_if_new", welcome_if_new_stub)
         prevsize = proto.router.total_nodes()
         (retnode, storekey, storeval) = proto.welcome_if_new(proto, newnode)
@@ -306,37 +293,33 @@ class TestKademliaProtocol:
         assert storeval == resources[0].value
         assert proto.router.total_nodes() == prevsize + 1
 
-    def test_rpc_find_node_returns_neighbors(
-        self, make_basic_node, make_proto, make_network_node
-    ):
+    def test_rpc_find_node_returns_neighbors(self, generic_node, make_proto, ping_node):
         proto = make_proto()
-        nodes = [make_basic_node() for _ in range(10)]
+        nodes = [generic_node() for _ in range(10)]
         for node in nodes:
             proto.router.add_contact(node)
-        sender = make_network_node()
+        sender = ping_node()
         result = proto.rpc_find_node(sender, sender.key, nodes[1].key)
         assert isinstance(result, list)
         assert len(result) == 9
 
-    def test_rpc_find_node_returns_empty(self, make_proto, make_network_node):
+    def test_rpc_find_node_returns_empty(self, make_proto, ping_node):
         proto = make_proto()
-        sender = make_network_node()
+        sender = ping_node()
         result = proto.rpc_find_node(sender, sender.key, "notAKey")
         assert not result
 
-    def test_rpc_find_value_returns_value(
-        self, make_proto, make_network_node, make_storage_node
-    ):
+    def test_rpc_find_value_returns_value(self, make_proto, ping_node, index_node):
         proto = make_proto()
-        nodes = [make_storage_node() for _ in range(5)]
+        nodes = [index_node() for _ in range(5)]
         for node in nodes:
             proto.storage.set(node)
-        sender = make_network_node()
+        sender = ping_node()
         result = proto.rpc_find_value(sender, sender.key, nodes[1].key)
-        assert result["value"] == nodes[1]
+        assert list(result.values())[0] == nodes[1].value
 
-    def test_find_value_return_empty(self, make_proto, make_network_node):
+    def test_find_value_return_empty(self, make_proto, ping_node):
         proto = make_proto()
-        sender = make_network_node()
+        sender = ping_node()
         result = proto.rpc_find_value(sender, sender.key, "notExists")
         assert result == []
