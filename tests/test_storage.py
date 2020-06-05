@@ -1,115 +1,105 @@
 import os
 import time
 
-from liaa.storage import EphemeralStorage, DiskStorage
+from liaa.storage import EphemeralStorage
 
 
 class TestEphemeralStorage:
-	# pylint: disable=no-self-use
-	def test_can_instantiate(self, mkpeer):
-		storage = EphemeralStorage(mkpeer(), 10)
-		assert isinstance(storage, EphemeralStorage)
+    def test_can_init_ephemeral_storage(self, ping_node):
+        storage = EphemeralStorage(ping_node(), 10)
+        assert isinstance(storage, EphemeralStorage)
 
-	def test_set_and_get(self, mkpeer, mkresource):
-		storage = EphemeralStorage(mkpeer(), 10)
-		resource = mkresource(key="one", value=b"two")
-		storage.set(resource)
+    def test_root_dir_is_created_on_init(self, storage):
+        storage = storage()
+        assert os.path.exists(storage.root_dir) and os.path.isdir(storage.root_dir)
 
-		node = storage.get(resource.key)
-		assert  node.value == b"two"
+    def test_prune_removes_nodes_older_than_ttl_arg(self, storage, index_node):
+        storage = storage(2)
 
-	def test_storage_ttl(self, mkpeer, mkresource):
-		storage = EphemeralStorage(mkpeer(), 0)
-		resource = mkresource(key="one", value=b"two")
-		storage.set(resource)
-		assert not storage.get(resource.key)
+        nodes = [index_node() for _ in range(3)]
+        for node in nodes:
+            storage.set(node)
 
-	def test_iter(self, mkpeer, mkresource):
-		storage = EphemeralStorage(mkpeer(), 0)
-		resource = mkresource(key="one", value=b"two")
-		storage.set(resource)
-		for node in storage:
-			assert node.key == resource.key
-			assert node.value == resource.value
+        time.sleep(2)
+        storage.prune()
 
-	def test_iter_older_than(self, mkpeer, mkresource):
-		storage = EphemeralStorage(mkpeer(), 5)
-		resources = [mkresource() for _ in range(3)]
+        assert not storage
 
-		for node in resources:
-			storage.set(node)
+    def test_can_set_and_get_storage_node(self, storage, index_node):
+        storage = storage(10)
+        resource = index_node(key="one", value=b"two")
+        storage.set(resource)
 
-		for key, value in storage.iter_older_than(3):
-			node = mkresource(key, value)
-			assert node in resources
+        node = storage.get(resource.key)
+        assert node == index_node(key="one", value=b"two")
 
+    def test_can_remove_storage_node(self, index_node, storage):
+        storage = storage()
+        node = index_node()
+        storage.set(node)
 
-class TestDiskStorage:
+        storage.remove(node)
+        assert not storage
 
-	# pylint: disable=no-self-use
-	def test_instantiation(self, mkpeer):
-		node = mkpeer()
-		storage = DiskStorage(node)
-		assert isinstance(storage, DiskStorage)
-		assert len(storage) == 0
+    def test_triple_iter_returns_all_storage_data(self, index_node, storage):
+        storage = storage()
+        nodes = [index_node() for _ in range(3)]
+        for node in nodes:
+            storage.set(node)
 
-	def test_store_contents(self, mkpeer, mkresource):
-		node = mkpeer()
-		storage = DiskStorage(node)
-		resource = mkresource()
-		storage.set(resource)
+        # pylint: disable=protected-access
+        results = storage._triple_iter()
+        assert isinstance(results, list)
+        assert len(results) == 3
+        assert isinstance(results[0], tuple)
 
-		assert len(storage) == len(storage.contents()) == 1
-		assert storage.contents()[0] == str(resource.key)
+    def test_iter_iterates_properly_over_triple_iter_return_value(
+        self, storage, index_node
+    ):
+        storage = storage()
+        nodes = [index_node() for _ in range(3)]
+        for node in nodes:
+            storage.set(node)
 
-	def test_storage_remove(self, mkpeer, mkresource):
-		node = mkpeer()
-		storage = DiskStorage(node)
-		resource = mkresource()
-		storage.set(resource)
+        for i, node in enumerate(storage):
+            assert node.key == nodes[i].key
 
-		assert len(storage) == 1
+    def test_contains_returns_whether_or_not_node_exists_in_storage(
+        self, storage, index_node
+    ):
+        storage = storage()
+        nodes = [index_node() for _ in range(3)]
+        for node in nodes:
+            storage.set(node)
 
-		storage.remove(resource.key)
-		assert len(storage) == 0
+        assert nodes[0] in storage
 
-	def test_load_data(self, mkpeer, mkresource):
-		storage = DiskStorage(mkpeer())
-		resource = mkresource()
-		storage.set(resource)
+        storage.remove(nodes[0])
 
-		# pylint: disable=protected-access
-		(bday, value) = storage._load_data(resource.key)
-		assert resource.value == value
-		assert isinstance(bday, float)
+        assert not nodes[0] in storage
 
-	def test_persist_dir_exists(self, mkpeer):
-		storage = DiskStorage(mkpeer())
+    def test_storage_expires_evicts_resources_older_than_ttl(self, storage, index_node):
+        storage = storage(0)
+        resource = index_node(key="one", value=b"two")
+        storage.set(resource)
+        assert not storage.get(resource.long_id)
 
-		assert os.path.exists(storage.dir)
-		assert os.path.exists(storage.content_dir)
+    def test_iter_uses_nodes_in_storage_data(self, storage, index_node):
+        storage = storage(0)
+        resource = index_node(key="one", value=b"two")
+        storage.set(resource)
 
-	def test_set_and_get(self, mkpeer, mkresource):
-		storage = DiskStorage(mkpeer())
-		resource = mkresource()
-		storage.set(resource)
-		result = storage.get(resource.key)
-		assert result == resource
+        for node in storage:
+            assert node.key == resource.key
+            assert node.value == resource.value
 
+    def test_iter_older_than_iters_nodes_older_than_ttl_arg(self, storage, index_node):
+        storage = storage(5)
+        resources = [index_node() for _ in range(3)]
 
-	def test_prune_removes_old_data(self, mkpeer, mkresource):
+        for node in resources:
+            storage.set(node)
 
-		ttl = 3
-		storage = DiskStorage(mkpeer(), ttl=ttl)
-		resources = [mkresource() for _ in range(3)]
-		storage.set(resources[0])
-
-		time.sleep(ttl + 2)
-		storage.prune()
-
-		storage.set(resources[1])
-		assert len(storage) == 1
-
-		for node in storage:
-			assert node.key == resources[1].key
-			assert node.value == resources[1].value
+        for key, value in storage.iter_older_than(3):
+            node = index_node(key, value)
+            assert node in resources

@@ -15,8 +15,5 @@ Makefile
 pytest.ini
 README.md
 setup.py
-test-virtualenv/
 tests/
 docs/
-virtualenv/
-analysis/

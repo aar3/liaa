@@ -30,3 +30,5 @@ venv/
 virtualenv/
 docs/TODO
 analysis/
+
+.mypy_cache/

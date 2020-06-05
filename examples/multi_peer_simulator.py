@@ -23,9 +23,9 @@ import threading
 
 from liaa.server import Server
 from liaa.utils import rand_str, load_ssl
-from liaa.node import ResourceNode, PeerNode
+from liaa.node import IndexNode, PingNode
 
-# pylint: disable=invalid-name
+  
 host = "127.0.0.1"
 num_peers = 4  # minimum of 4
 start_port = 8000
@@ -40,49 +40,49 @@ log.setLevel(logging.DEBUG)
 
 
 async def make_fake_data(server):
-	while True:
-		node = ResourceNode(key=rand_str(), value=rand_str().encode())
-		await server.set(node)
-		await asyncio.sleep(5)
+    while True:
+        node = IndexNode(key=rand_str(), value=rand_str().encode())
+        await server.set(node)
+        await asyncio.sleep(5)
 
 
 def run_server(loop, server, neighbor_ports):
-	"""
-	Start a given server on a given port using a given event loop
-	"""
-	loop.set_debug(True)
-	loop.run_until_complete(server.listen())
+    """
+    Start a given server on a given port using a given event loop
+    """
+    loop.set_debug(True)
+    loop.run_until_complete(server.listen())
 
-	bootstrap_peers = [(host, p) for p in neighbor_ports]
-	loop.create_task(server.bootstrap(bootstrap_peers))
-	loop.create_task(make_fake_data(server))
-	loop.run_forever()
+    bootstrap_peers = [(host, p) for p in neighbor_ports]
+    loop.create_task(server.bootstrap(bootstrap_peers))
+    loop.create_task(make_fake_data(server))
+    loop.run_forever()
 
 
 def main():
 
-	handles = []
-	servers = []
+    handles = []
+    servers = []
 
-	ports = list(range(start_port, (start_port + num_peers)))
+    ports = list(range(start_port, (start_port + num_peers)))
 
-	for i in range(num_peers):
-		ksize = random.randint(14, 20)
-		alpha = random.randint(2, 6)
-		server = Server("0.0.0.0", ports[i], ksize=ksize, alpha=alpha)
-		servers.append(server)
+    for i in range(num_peers):
+        ksize = random.randint(14, 20)
+        alpha = random.randint(2, 6)
+        server = Server("0.0.0.0", ports[i], ksize=ksize, alpha=alpha)
+        servers.append(server)
 
-	for server in servers:
-		boostrap_port_pool = [p for p in ports if p != server.node.port]
-		loop = asyncio.new_event_loop()
-		neighbor_ports = random.sample(boostrap_port_pool, random.randint(1, 3))
-		handle = threading.Thread(target=run_server, args=(loop, server, neighbor_ports))
-		handle.start()
+    for server in servers:
+        boostrap_port_pool = [p for p in ports if p != server.node.port]
+        loop = asyncio.new_event_loop()
+        neighbor_ports = random.sample(boostrap_port_pool, random.randint(1, 3))
+        handle = threading.Thread(target=run_server, args=(loop, server, neighbor_ports))
+        handle.start()
 
-	for handle in handles:
-		handle.join()
+    for handle in handles:
+        handle.join()
 
 
 if __name__ == "__main__":
 
-	main()
+    main()
