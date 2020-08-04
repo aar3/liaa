@@ -284,6 +284,21 @@ class RoutingTable:
         k: Optional[int] = None,
         exclude: Optional[GenericNode] = None,
     ) -> List[GenericNode]:
+        """
+        Find the {min(k, self.k)} closest nodes to a given {node} 
+
+        @parameters
+            node: GenericNode
+                node to measure distance against
+            k: Optional[int]
+                max number of nodes to return from measure
+            exclude: Optional[GenericNode]
+                any nodes to exclude in measure
+
+        @return
+            List[GenericNode]:
+                closes {k} nodes found in routing table
+        """
 
         k = k or self.ksize
         nodes: List[GenericNode] = []

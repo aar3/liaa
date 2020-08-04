@@ -138,7 +138,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		"""
         self.transport = transport
 
-    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+    def datagram_received(self, data: bytes, addr: IPv4) -> None:
         """
 		Called when a datagram is received.
 
@@ -157,7 +157,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
         )
         asyncio.ensure_future(self._solve_dgram(data, addr))
 
-    async def _solve_dgram(self, byte_arr: bytes, address: Tuple[str, int]) -> None:
+    async def _solve_dgram(self, byte_arr: bytes, address: IPv4) -> None:
         """
 		Responsible for processing an incoming datagram
 
@@ -165,7 +165,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		----------
 			byte_arr: bytes
 				Data to be processed
-			address: Tuple[str, int]
+			address: IPv4
 				Address of sending peer
 		"""
         if len(byte_arr) < 22:
@@ -183,7 +183,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
         else:
             log.debug("Received unknown message from %s, ignoring", address)
 
-    def _accept_response(self, byte_arr: bytes, address: Tuple[str, int]) -> None:
+    def _accept_response(self, byte_arr: bytes, address: IPv4) -> None:
         """
 		Processor for incoming responses
 
@@ -191,7 +191,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		----------
 			byte_arr: bytes
 				Datagram representing incoming message from peer
-			address: Tuple[str, int]
+			address: IPv4
 				Address of peer receiving response
 		"""
         idf, data = byte_arr[1:21], umsgpack.unpackb(byte_arr[21:])
@@ -217,7 +217,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 
         del self.index[idf]
 
-    async def _accept_request(self, byte_arr: bytes, address: Tuple[str, int]) -> None:
+    async def _accept_request(self, byte_arr: bytes, address: IPv4) -> None:
         """
 		Process an incoming request datagram as well as its RPC response
 
@@ -225,7 +225,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
 		----------
 			byte_arr: bytes
 				Datagram representing incoming message from peer
-			address: Tuple[str, int]
+			address: IPv4
 				Address of sender
 		"""
         idf, data = byte_arr[1:21], umsgpack.unpackb(byte_arr[21:])
@@ -278,7 +278,7 @@ class RPCDatagramProtocol(asyncio.DatagramProtocol):
             pass
 
         # TODO: figure out what this is or fix it (>’-‘)>
-        def func(address: Tuple[str, int], *args: List[Any]) -> Any:
+        def func(address: IPv4, *args: List[Any]) -> Any:
             msg_id = hashlib.sha1(os.urandom(32)).digest()
             data = umsgpack.packb([name, args])
             if len(data) > 8192:
@@ -361,7 +361,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 		"""
         return sender
 
-    def rpc_ping(self, sender: Tuple[str, int], node_id: str) -> str:
+    def rpc_ping(self, sender: IPv4, node_id: str) -> str:
         """
 		Accept an incoming request from sender and return sender's ID
 		to indicate a successful ping
@@ -383,35 +383,29 @@ class KademliaProtocol(RPCDatagramProtocol):
         self.welcome_if_new(source)
         return self.source_node.key
 
-    # pylint: disable=unused-argument
-    def rpc_store(self, sender: PingNode, key: str, value: bytes) -> bool:
+    def rpc_store(self, requestor: PingNode, to_store: IndexNode) -> bool:
         """
-		Store data from a given sender
+		@description
+            Store data from a given sender
 
-		Parameters
-		----------
-			sender: PingNode
+		@parameters
+            requestor: PingNode
 				Node that is initiating/requesting store
-			key: str
+			to_store: IndexNode
 				ID of resource to be stored
-			value: bytes
-				Payload to be stored at `key`
-
-		Returns
-		-------
-			bool:
+		@returns
+            bool
 				Indicator of successful operation
 		"""
-        self.welcome_if_new(sender)
+        self.welcome_if_new(requestor)
         log.debug(
             "%s got store request from %s, storing %iB at %s",
             self.source_node,
-            sender.key,
-            len(value),
-            key,
+            requestor.key,
+            len(to_store.value),
+            to_store.key,
         )
-        node = IndexNode(key, value)
-        self.storage.set(node)
+        self.storage.set(to_store)
         return True
 
     def rpc_find_node(
@@ -420,17 +414,15 @@ class KademliaProtocol(RPCDatagramProtocol):
         """
 		Return a list of nodes that are closest to a given key (node_id to be found)
 
-		Parameters
-		----------
-			sender: PingNode
+		@parameters
+            sender: PingNode
 				The node initiating the request
 			node_id: str
 				Node key of the node initiating the request
 			key: str
 				Key of node who's closes neighbors we want to return
 
-		Returns
-		-------
+		@returns
             List[GenericNodeInfo]
                 Tuple representations of closest neighbors in regards to `key`
                 which will be either Tuple[str, str, int] if node is a peer or,
@@ -447,22 +439,21 @@ class KademliaProtocol(RPCDatagramProtocol):
         self, sender: PingNode, node_id: str, key: str
     ) -> Union[IndexNodeAsDict, List[GenericNodeInfo]]:
         """
-		Return the value at a given key. If the key is found, return it
-		to the requestor, else execute an rpc_find_node to find neighbors
-		of sender that might have key
+		@description
+            Return the value at a given key. If the key is found, return it
+            to the requestor, else execute an rpc_find_node to find neighbors
+            of sender that might have key
 
-		Parameters
-		----------
-			sender: PingNode
+		@parmaeters
+            sender: PingNode
 				Node at which key is stored
 			node_id: str
 				Key ID of node at which key is stored
 			key: str
 				ID of resource to be found
 
-		Returns
-		-------
-			IndexNode:
+		@returns
+            IndexNode:
 				Will be either the given value indexed in a hashmap if the value is
 				found, or will recursively attempt to find node at which key is
 				stored via calls to `rpc_find_node`
@@ -478,17 +469,16 @@ class KademliaProtocol(RPCDatagramProtocol):
         self, to_ask: PingNode, to_find: GenericNode
     ) -> ResponseIndexItem:
         """
-		Dial a given to_ask in order to find to_find
+        @description
+		    Dial a given to_ask in order to find to_find
 
-		Parameters
-		----------
-			to_ask: PingNode
+		@parameters
+            to_ask: PingNode
 				Node to ask regarding to_find
 			to_find: GenericNode
 				Node that this call is attempting to find
 
-		Returns
-		-------
+		@returns
             ResponseIndexItem
 				Nodes closes to to_find which to continue search
 		"""
@@ -499,18 +489,17 @@ class KademliaProtocol(RPCDatagramProtocol):
         self, to_ask: PingNode, to_find: GenericNode
     ) -> ResponseIndexItem:
         """
-		Dial a given to_ask in order to find a value on to_find
+		@description
+            Dial a given to_ask in order to find a value on to_find
 
-		Parameters
-		----------
-			to_ask: PingNode
+		@parameters
+            to_ask: PingNode
 				Node to ask in order to find to_find to retrieve a given value
 			to_find: GenericNode
 				Node that this call is attempting to find
 
-		Returns
-		-------
-			ResponseIndexItem
+		@returns
+            ResponseIndexItem
 				Either the list of nodes close(r) to the key associated with this
 				value, or the actual value
 		"""
@@ -519,16 +508,15 @@ class KademliaProtocol(RPCDatagramProtocol):
 
     async def call_ping(self, to_ask: PingNode) -> ResponseIndexItem:
         """
-		Wrapper for rpc_ping, where we just handle the result
+		@description
+            Wrapper for rpc_ping, where we just handle the result
 
-		Parameters
-		----------
-			to_ask: PingNode
+		@parameters
+            to_ask: PingNode
 				Node at which to send ping request
 
-		Returns
-		-------
-			ResponseIndexItem:
+		@returns
+            ResponseIndexItem:
 				ID of peer responding to ping
 		"""
         result = await self.ping(to_ask.addr(), self.source_node.key)
@@ -553,7 +541,7 @@ class KademliaProtocol(RPCDatagramProtocol):
 				Indication that store operation was succesful
 		"""
         address = to_ask.addr()
-        result = await self.store(address, self.source_node.key, to_store)
+        result = await self.store(address, to_store.key)
         return self.handle_call_response(result, to_ask)
 
     def welcome_if_new(self, node: PingNode) -> None:
@@ -601,19 +589,18 @@ class KademliaProtocol(RPCDatagramProtocol):
         self, result: ResponseIndexItem, node: PingNode
     ) -> ResponseIndexItem:
         """
-		If we get a valid response, welcome the node (if need be). If
-		we get no response, remove the node as peer is down
+        @description
+            If we get a valid response, welcome the node (if need be). If
+            we get no response, remove the node as peer is down
 
-		Parameters
-		----------
+		@parameters
 			result: ResponseIndexItem
 				Could be the result of any rpc method
 			node: PingNode
 				Node to which operation was sent
 
-		Returns
-		-------
-			result: ResponseIndexItem
+		@returns
+            ResponseIndexItem
 				The result from our rpc method
 		"""
         if not result[0]:

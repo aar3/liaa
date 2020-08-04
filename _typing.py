@@ -2,6 +2,9 @@
 from asyncio import (
     Handle,
     Future,
+    AbstractEventLoop,
+    TimerHandle,
+    BaseProtocol,
 )
 
 from mypy_extensions import VarArg
@@ -32,6 +35,7 @@ T = TypeVar("T")
 Function = Callable[..., T]
 F = TypeVar("F", bound=Function)
 
+IPv4 = Tuple[str, int]
 PingNodeInfo = Tuple[int, str, int]
 IndexNodeInfo = Tuple[str, Optional[bytes], float]
 IndexNodeAsDict = Dict[str, Optional[bytes]]
@@ -44,3 +48,7 @@ TKademliaProtocol = Any
 
 ValueSpiderFindReturn = Union[Optional[bytes], ResponseIndexItem]
 NodeSpiderFindReturn = Union[GenericNodeInfo, ResponseIndexItem]
+
+UDPTransport = Any
+AsyncioLoop = TimerHandle
+TServer = Any

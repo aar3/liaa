@@ -61,7 +61,7 @@ class PingNode(Node):
     Referenced as the {node} in the protocol
     """
 
-    def addr(self) -> Tuple[str, int]:
+    def addr(self) -> IPv4:
         return split_addr(self.key)
 
     def ping(self) -> None:

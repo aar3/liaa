@@ -16,7 +16,7 @@ def join_addr(addr: Tuple[str, Union[int, str]]) -> str:
     return ":".join(map(str, addr))
 
 
-def split_addr(addr: str) -> Tuple[str, int]:
+def split_addr(addr: str) -> IPv4:
     """
 	Split a string address to tuple
 	"""
