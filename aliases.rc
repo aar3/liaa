@@ -1,0 +1,4 @@
+alias test='./venv/bin/python -m pytest test/tests.py -rx -v -s'
+alias lint='./venv/bin/python -m pylint liaa.py'
+alias typing='./venv/bin/python -m mypy liaa.py --config mypy.ini'
+alias format='./venv/bin/python -m black liaa.py -l 120'

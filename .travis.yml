@@ -1,0 +1,18 @@
+language: python
+python: 3.8
+dist: xenial
+os: linux
+
+before_install:
+  - sudo apt-get update
+
+jobs:
+  include: 
+    - stage: "Linter"
+      script: python -m pylint kay.py
+
+    - stage: "Type Checker"
+      script: python -m mypy kay.py --config mypy.ini
+
+    - stage: "Tests"
+      script: python -m pytest tests.py -rsxvx

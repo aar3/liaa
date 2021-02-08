@@ -1,0 +1,12 @@
+# app
+psutil
+umsgpack
+
+# test
+pytest
+
+# dev
+black
+mypy
+pylint
+
